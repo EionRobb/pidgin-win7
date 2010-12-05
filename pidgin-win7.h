@@ -9,6 +9,8 @@
 #include <initguid.h>
 
 #include <glib.h>
+#include <gtk/gtk.h>
+#include <gdk/gdkwin32.h>
 
 #ifndef PURPLE_PLUGINS
 #	define PURPLE_PLUGINS
@@ -20,6 +22,8 @@
 #include "status.h"
 #include "plugin.h"
 #include "debug.h"
+
+#include "gtkft.h"
 
 #ifndef _
 #define _(a) (a)
@@ -64,6 +68,8 @@ typedef interface ICustomDestinationList ICustomDestinationList;
 #define __IPropertyStore_FWD_DEFINED__
 typedef interface IPropertyStore IPropertyStore;
 #endif 	/* __IPropertyStore_FWD_DEFINED__ */
+
+typedef interface ITaskbarList3 ITaskbarList3;
 
 #ifndef __IObjectArray_INTERFACE_DEFINED__
 #define __IObjectArray_INTERFACE_DEFINED__
@@ -261,7 +267,7 @@ typedef struct {
 #endif // INITGUID 
 #endif // DEFINE_PROPERTYKEY
 
-#if 1
+
 DEFINE_PROPERTYKEY(PKEY_Title, 0xF29F85E0, 0x4FF9, 0x1068, 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9, 2);
 
 #ifndef __IPropertyStore_INTERFACE_DEFINED__
@@ -317,7 +323,6 @@ interface IPropertyStore
 
     
 #endif /* __IPropertyStore_INTERFACE_DEFINED__ */
-#endif /* if 0 */
 
 /*
 extern "C" const CLSID CLSID_TaskbarList              = {0x56fdf344,0xfd6d,0x11d0,{0x95,0x8a,0x00,0x60,0x97,0xc9,0xa0,0x90}}; // 56fdf344-fd6d-11d0-958a-006097c9a090;
@@ -331,48 +336,222 @@ extern "C" const CLSID CLSID_CustomDestinationList      = {0x77f10cf0,0x3db5,0x4
 extern "C" const CLSID CLSID_EnumerableObjectCollection = {0x2d3468c1,0x36a7,0x43b6,{0xac,0x24,0xd3,0xf0,0x2f,0xd9,0x60,0x7a}};
 */
 
+EXTERN_C const IID IID_ITaskbarList3 = {0xea1afb91,0x9e28,0x4b86,{0x90,0xe9,0x9e,0x9f,0x8a,0x5e,0xef,0xaf}}; // ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf
+EXTERN_C const CLSID CLSID_TaskbarList = {0x56fdf344,0xfd6d,0x11d0,{0x95,0x8a,0x00,0x60,0x97,0xc9,0xa0,0x90}}; // 56fdf344-fd6d-11d0-958a-006097c9a090;
+
+typedef enum TBPFLAG
+{
+    TBPF_NOPROGRESS = 0,
+    TBPF_INDETERMINATE      = 0x1,
+    TBPF_NORMAL     = 0x2,
+    TBPF_ERROR      = 0x4,
+    TBPF_PAUSED     = 0x8
+} TBPFLAG;
+
+typedef enum TBATFLAG
+{
+    TBATF_USEMDITHUMBNAIL   = 0x1,
+    TBATF_USEMDILIVEPREVIEW = 0x2
+} TBATFLAG;
+
+typedef struct tagTHUMBBUTTON
+{
+    DWORD dwMask;
+    UINT iId;
+    UINT iBitmap;
+    HICON hIcon;
+    //    WCHAR pszTip[ 260 ];
+    wchar_t pszTip[ 260 ];
+    DWORD dwFlags;
+} THUMBBUTTON;
+
+typedef struct tagTHUMBBUTTON *LPTHUMBBUTTON;
+
+typedef struct ITaskbarList3Vtbl
+{
+
+	BEGIN_INTERFACE
+    HRESULT ( STDMETHODCALLTYPE *QueryInterface )(
+		ITaskbarList3 * This, 
+		REFIID riid, 
+		void **ppvObject);
+
+    ULONG ( STDMETHODCALLTYPE *AddRef )( 
+		ITaskbarList3 * This);
+
+    ULONG ( STDMETHODCALLTYPE *Release )( 
+		ITaskbarList3 * This);
+
+    HRESULT ( STDMETHODCALLTYPE *HrInit )( 
+		ITaskbarList3 * This);
+
+    HRESULT ( STDMETHODCALLTYPE *AddTab )( 
+		ITaskbarList3 * This, 
+		HWND hwnd);
+
+    HRESULT ( STDMETHODCALLTYPE *DeleteTab )( 
+		ITaskbarList3 * This, 
+		HWND hwnd);
+
+    HRESULT ( STDMETHODCALLTYPE *ActivateTab )( 
+		ITaskbarList3 * This, 
+		HWND hwnd);
+
+    HRESULT ( STDMETHODCALLTYPE *SetActiveAlt )( 
+		ITaskbarList3 * This, 
+		HWND hwnd);
+
+    HRESULT ( STDMETHODCALLTYPE *MarkFullscreenWindow )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        BOOL fFullscreen);
+
+    HRESULT ( STDMETHODCALLTYPE *SetProgressValue )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        ULONGLONG ullCompleted, 
+		ULONGLONG ullTotal);
+
+    HRESULT ( STDMETHODCALLTYPE *SetProgressState )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        TBPFLAG tbpFlags);
+
+    HRESULT ( STDMETHODCALLTYPE *RegisterTab )(  
+		ITaskbarList3 * This, 
+		HWND hwndTab, 
+		HWND hwndMDI);
+
+    HRESULT ( STDMETHODCALLTYPE *UnregisterTab )( 
+		ITaskbarList3 * This, 
+		HWND hwndTab);
+
+    HRESULT ( STDMETHODCALLTYPE *SetTabOrder )( 
+		ITaskbarList3 * This, 
+		HWND hwndTab,
+        HWND hwndInsertBefore);
+
+    HRESULT ( STDMETHODCALLTYPE *SetTabActive )( 
+		ITaskbarList3 * This, 
+		HWND hwndTab,
+        HWND hwndMDI, 
+		TBATFLAG tbatFlags);
+
+    HRESULT ( STDMETHODCALLTYPE *ThumbBarAddButtons )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        UINT cButtons, 
+		LPTHUMBBUTTON pButton);
+
+    HRESULT ( STDMETHODCALLTYPE *ThumbBarUpdateButtons )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        UINT cButtons, 
+		LPTHUMBBUTTON pButton);
+
+    HRESULT ( STDMETHODCALLTYPE *ThumbBarSetImageList )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        HIMAGELIST himl);
+
+    HRESULT ( STDMETHODCALLTYPE *SetOverlayIcon )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        HICON hIcon, 
+		LPCWSTR pszDescription);
+
+    HRESULT ( STDMETHODCALLTYPE *SetThumbnailTooltip )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        LPCWSTR pszTip);
+
+    HRESULT ( STDMETHODCALLTYPE *SetThumbnailClip )( 
+		ITaskbarList3 * This, 
+		HWND hwnd,
+        RECT *prcClip);
+
+	END_INTERFACE
+} ITaskbarList3Vtbl;
+
+interface ITaskbarList3
+{
+	CONST_VTBL struct ITaskbarList3Vtbl *lpVtbl;
+};
+
+
 void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl);
 void pidgin_win7_delete_jumplist(ICustomDestinationList *pcdl);
 IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
 	const char *path, const char *args, const char *description);
 void pidgin_win7_add_tasks();
 
+static void ft_update(PurpleXfer *xfer, gpointer data);
 static gboolean uri_handler(const char *proto, const char *cmd, GHashTable *params);
+
+typedef struct {
+	ICustomDestinationList *pcdl;
+	ITaskbarList3 *itl;
+} PidginWin7Store;
 
 static gboolean
 plugin_load(PurplePlugin *plugin)
 {
-	ICustomDestinationList *pcdl;
+	PidginWin7Store *store;
 	purple_debug_info("win7", "plugin_load\n");
-	if (SUCCEEDED(CoCreateInstance(&CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER, &IID_ICustomDestinationList, (void**)&pcdl)))
+	
+	store = g_new0(PidginWin7Store, 1);
+	plugin->extra = store;
+	
+	if (SUCCEEDED(CoCreateInstance(&CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER, &IID_ICustomDestinationList, (void**)&store->pcdl)))
 	{
-		plugin->extra = pcdl;
-		pidgin_win7_create_jumplist(pcdl);
+		pidgin_win7_create_jumplist(store->pcdl);
 		
 		purple_signal_connect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uri_handler), NULL);
-		return TRUE;
 	} else {
 		return FALSE;
 	}
+	
+	if (SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (void**)&store->itl)))
+	{
+		void *ft_handle = purple_xfers_get_handle();
+		purple_signal_connect(ft_handle, "file-recv-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+	} else {
+		return FALSE;
+	}
+	return TRUE;
 }
 
 static gboolean
 plugin_unload(PurplePlugin *plugin)
 {
-	ICustomDestinationList *pcdl = (ICustomDestinationList *)plugin->extra;
+	PidginWin7Store *store = (PidginWin7Store *)plugin->extra;
 	purple_debug_info("win7", "plugin_unload\n");
-	if (pcdl)
+	
+	if (store->pcdl)
 	{
-		pidgin_win7_delete_jumplist(pcdl);
+		pidgin_win7_delete_jumplist(store->pcdl);
 		
 		purple_signal_disconnect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uri_handler));
 	}
+	
+	g_free(store);
+	
 	return TRUE;
 }
+
+static PurplePlugin *this_plugin = NULL;
 
 static void
 plugin_init(PurplePlugin *plugin)
 {
+	this_plugin = plugin;
 }
 
 static PurplePluginInfo info = 

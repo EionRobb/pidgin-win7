@@ -9,17 +9,89 @@ pidgin_on_status_change()
 	HICON icon = LoadIcon(winpidgin_exe_hinstance(), image number);
 	SetOverlayIcon(winpidgin_exe_hinstance(), icon, L"Online");
 }
-
-void
-on_file_transfer_progress()
+*/
+struct _PidginXferDialog
 {
-	pcdl->SetProgressState(winpidgin_exe_hinstance(), TBPF_NOPROGRESS);
-	//TBPF_INDETERMINATE
-	//TBPF_NORMAL
-	//TBPF_PAUSED
-	//TBPF_ERROR
-	pcdl->SetProgressValue(winpidgin_exe_hinstance(), 0, 100);
-}*/
+      gboolean keep_open;
+      gboolean auto_clear;
+
+      gint num_transfers;
+
+      PurpleXfer *selected_xfer;
+
+      GtkWidget *window;
+}; //Don't need all the struct, just enough to get the window
+
+static HWND
+pidgin_get_ft_hwnd()
+{
+	HWND ft_window = NULL;
+	struct _PidginXferDialog *xfer_dialog;
+	
+	xfer_dialog = pidgin_get_xfer_dialog();
+	
+	ft_window = GDK_WINDOW_HWND(gtk_widget_get_window(xfer_dialog->window));
+	
+	return ft_window;
+}
+
+gboolean
+ft_update_transferred(gpointer data)
+{
+	PurpleXfer *xfer = (PurpleXfer *)data;
+	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
+	HWND ft_window;
+	purple_debug_info("win7", "ft_update_transferred\n");
+	
+	ft_window = pidgin_get_ft_hwnd();
+	if (!ft_window)
+		return FALSE;
+	
+	itl->lpVtbl->SetProgressValue(itl, ft_window, purple_xfer_get_bytes_sent(xfer), purple_xfer_get_size(xfer));
+	
+	switch(xfer->status)
+	{
+		case PURPLE_XFER_STATUS_CANCEL_LOCAL:
+		case PURPLE_XFER_STATUS_CANCEL_REMOTE:
+		case PURPLE_XFER_STATUS_DONE:
+			return FALSE;
+		default:
+			break;
+	}
+	return TRUE;
+}
+
+static void
+ft_update(PurpleXfer *xfer, gpointer data)
+{
+	ITaskbarList3 *itl = (ITaskbarList3 *)data;
+	HWND ft_window;
+	purple_debug_info("win7", "ft_update\n");
+	
+	ft_window = pidgin_get_ft_hwnd();
+	if (!ft_window)
+		return;
+	
+	switch(xfer->status)
+	{
+		case PURPLE_XFER_STATUS_UNKNOWN:
+		case PURPLE_XFER_STATUS_NOT_STARTED:
+			itl->lpVtbl->SetProgressState(itl, ft_window, TBPF_INDETERMINATE);
+			break;
+		case PURPLE_XFER_STATUS_STARTED:
+			purple_timeout_add_seconds(1, ft_update_transferred, xfer);
+		case PURPLE_XFER_STATUS_ACCEPTED:
+			itl->lpVtbl->SetProgressState(itl, ft_window, TBPF_NORMAL);
+			break;
+		case PURPLE_XFER_STATUS_DONE:
+			itl->lpVtbl->SetProgressState(itl, ft_window, TBPF_NOPROGRESS);
+			break;
+		case PURPLE_XFER_STATUS_CANCEL_LOCAL:
+		case PURPLE_XFER_STATUS_CANCEL_REMOTE:
+			itl->lpVtbl->SetProgressState(itl, ft_window, TBPF_ERROR);
+			break;
+	}
+}
 
 void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl)
 {
