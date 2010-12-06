@@ -487,6 +487,7 @@ void pidgin_win7_add_tasks();
 
 static void ft_update(PurpleXfer *xfer, gpointer data);
 static gboolean uri_handler(const char *proto, const char *cmd, GHashTable *params);
+static void pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old);
 
 typedef struct {
 	ICustomDestinationList *pcdl;
@@ -525,6 +526,8 @@ plugin_load(PurplePlugin *plugin)
 	} else {
 		return FALSE;
 	}
+	
+	purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
 	return TRUE;
 }
 
@@ -540,6 +543,20 @@ plugin_unload(PurplePlugin *plugin)
 		
 		purple_signal_disconnect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uri_handler));
 	}
+	if (store->itl)
+	{
+		void *ft_handle = purple_xfers_get_handle();
+		purple_signal_disconnect(ft_handle, "file-recv-accept", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-recv-start", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-recv-cancel", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-recv-complete", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-send-accept", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update));
+		purple_signal_disconnect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update));
+	}
+	
+	purple_signal_disconnect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change));
 	
 	g_free(store);
 	
