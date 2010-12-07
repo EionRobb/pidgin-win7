@@ -24,6 +24,8 @@
 #include "debug.h"
 
 #include "gtkft.h"
+#include "gtkblist.h"
+#include "pidginstock.h"
 
 #ifndef _
 #define _(a) (a)
@@ -488,10 +490,13 @@ void pidgin_win7_add_tasks();
 static void ft_update(PurpleXfer *xfer, gpointer data);
 static gboolean uri_handler(const char *proto, const char *cmd, GHashTable *params);
 static void pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old);
+static gboolean blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data);
 
 typedef struct {
 	ICustomDestinationList *pcdl;
 	ITaskbarList3 *itl;
+	gulong blist_destroy_handler_id;
+	gulong pidgin_destroy_handler_id;
 } PidginWin7Store;
 
 static gboolean
@@ -499,6 +504,8 @@ plugin_load(PurplePlugin *plugin)
 {
 	PidginWin7Store *store;
 	purple_debug_info("win7", "plugin_load\n");
+	
+	purple_blist_show();
 	
 	store = g_new0(PidginWin7Store, 1);
 	plugin->extra = store;
@@ -527,7 +534,29 @@ plugin_load(PurplePlugin *plugin)
 		return FALSE;
 	}
 	
+	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+	// The buddy list MUST be shown before we put the taskbar icon on it
+	purple_blist_show();
+	purple_blist_set_visible(TRUE);
+
+	if (blist && blist->window)
+		store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
 	purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
+
+	pidgin_blist_visibility_manager_add();
+	
+	if (blist && blist->window)
+	{
+		// Hijack the signal when the window is closed from pidgin
+		guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
+		store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
+							signal_id, 0, NULL, NULL, NULL);
+		g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
+	}
+	
+	// Update the icon in the taskbar
+	pidgin_on_status_change(purple_savedstatus_get_current(), NULL);
+	
 	return TRUE;
 }
 
@@ -556,7 +585,21 @@ plugin_unload(PurplePlugin *plugin)
 		purple_signal_disconnect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update));
 	}
 	
+	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+	if (blist && blist->window)
+	{
+		//Unset the taskbar icon
+		pidgin_on_status_change(NULL, NULL);
+		if (g_signal_handler_is_connected(G_OBJECT(blist->window), store->blist_destroy_handler_id))
+		{
+			g_signal_handler_disconnect(G_OBJECT(blist->window), store->blist_destroy_handler_id);
+		}
+	}
+
+	g_signal_handler_unblock(blist->window, store->pidgin_destroy_handler_id);
 	purple_signal_disconnect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change));
+	
+	pidgin_blist_visibility_manager_remove();
 	
 	g_free(store);
 	

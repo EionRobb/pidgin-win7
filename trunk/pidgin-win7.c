@@ -2,9 +2,20 @@
 
 */
 #include "pidgin-win7.h"
-#include "gtkblist.h"
-#include "pidginstock.h"
 
+
+static gboolean
+blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data)
+{
+	purple_debug_info("win7", "blist_delete_event_cb\n");
+	// Prevent the window from being closed,
+	// minimise instead
+	gtk_window_iconify(GTK_WINDOW(w));
+	return TRUE;
+}
+
+
+/* This is all pinched from gtkdocklet-win32.c */
 #define WIN32_GDI_FAILED(api) printf("GDI FAILED %s\n", api)
 static HICON cached_icons[PURPLE_STATUS_NUM_PRIMITIVES + 2];
 static GtkWidget *image = NULL;
@@ -319,6 +330,16 @@ pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old)
 {
 	purple_debug_info("win7", "pidgin_on_status_change\n");
 	
+	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
+	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+	HWND blist_window = GDK_WINDOW_HWND(gtk_widget_get_window(blist->window));
+	
+	if (new == NULL)
+	{
+		//Unset the tray icon
+		itl->lpVtbl->SetOverlayIcon(itl, blist_window, NULL, NULL);
+	}
+	
 	PurpleStatusPrimitive status = 	purple_savedstatus_get_type(new);
 	const gchar *status_name = purple_savedstatus_get_title(new);
 	int icon_index = status;
@@ -352,10 +373,6 @@ pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old)
 
 		cached_icons[icon_index] = load_hicon_from_stock(icon_name);
 	}
-	
-	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
-	HWND blist_window = GDK_WINDOW_HWND(gtk_widget_get_window(blist->window));
-	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
 	
 	wstatus_name = g_utf8_to_utf16(status_name, -1, NULL, NULL, NULL);
 	
