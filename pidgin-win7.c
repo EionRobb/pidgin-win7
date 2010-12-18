@@ -4,6 +4,235 @@
 #include "pidgin-win7.h"
 
 
+static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
+
+#define GDK_PIXMAP_HBITMAP(pixmap)    (GDK_DRAWABLE_IMPL_WIN32(((GdkPixmapObject *)pixmap)->impl)->handle)
+// Conversation -> HWND  map
+static GHashTable *win7_conv_hwnd = NULL;
+// HWND -> Conversation  map
+static GHashTable *win7_hwnd_conv = NULL;
+
+LRESULT CALLBACK 
+win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
+{
+	PurpleConversation *conv;
+	PidginConversation *pconv;
+	HBITMAP hbitmap, mask;
+	GdkPixbuf *pixbuf;
+	GdkColormap *cmap;
+	
+	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
+	pconv = PIDGIN_CONVERSATION(conv);
+	
+	purple_debug_info("win7", "conv_handler %d %u\n", hwnd, msg);
+	
+	switch(msg)
+	{
+		case WM_CREATE:
+			// Create taskbar buttons?
+			//TODO We dont have thumbnail buttons yet
+			purple_debug_info("win7", "wm_create\n");
+			break;
+		case WM_CLOSE:
+			// Handle the thumbnail close button
+			purple_debug_info("win7", "wm_close\n");
+			purple_conversation_destroy(conv);
+			break;
+		case WM_ACTIVATE:
+			// Handle the thumbnail being clicked on
+			purple_debug_info("win7", "wm_activate\n");
+			purple_conversation_present(conv);
+			break;
+		case WM_COMMAND:
+			// Handle one of the buttons on the thumbnail being pressed
+			//TODO We dont have thumbnail buttons yet
+			purple_debug_info("win7", "wm_command\n");
+			break;
+		case WM_DWMSENDICONICTHUMBNAIL:
+			// Thumbnail needs to be drawn
+			purple_debug_info("win7", "wm_dwmsendiconicthumbnail\n");
+			
+			/*cmap = gdk_window_get_colormap(pconv->win->window);
+			pixbuf = gdk_pixbuf_get_from_drawable(NULL, pconv->win->window, cmap, 0, 0, 0, 0, 200, 200);
+			
+			pixbuf_to_hbitmaps_normal(pixbuf, &hbitmap, &mask);
+			DeleteObject (mask);
+			
+			DwmSetIconicThumbnail(hwnd, hbitmap, 0);*/
+			break;
+		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
+			// Preview needs to be drawn
+			purple_debug_info("win7", "wm_dwmsendiconiclivepreviewbitmap\n");
+			//DwmSetIconicLivePreviewBitmap();
+			break;
+	}
+	return DefWindowProc(hwnd, msg, wparam, lparam);
+}
+
+/* Create hidden window to process convtab messages */
+static HWND 
+win7_create_hiddenwin(PurpleConversation *conv)
+{
+	HWND hTab;
+	DWORD lasterror;
+	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	
+	purple_debug_info("win7", "Wname %s, DesktopWin %d, hInstance %d, modulehandle %d\n", wname, GetDesktopWindow(), winpidgin_exe_hinstance(), GetModuleHandle(NULL));
+	
+	/* Create the window */
+	hTab = CreateWindow(wname, purple_conversation_get_title(conv), 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
+	lasterror = GetLastError();
+	if (lasterror)
+		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
+	else
+		purple_debug_info("win7", "CreateWindow %d\n", hTab);
+	
+	BOOL fForceIconic = TRUE;
+	BOOL fHasIconicBitmap = TRUE;
+	
+	DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+		&fForceIconic, sizeof(fForceIconic));
+	
+	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+		sizeof(fHasIconicBitmap));
+	
+	g_hash_table_insert(win7_conv_hwnd, conv, hTab);
+	g_hash_table_insert(win7_hwnd_conv, hTab, conv);
+	
+	return hTab;
+}
+static void
+win7_destroy_hiddenwin(PurpleConversation *conv)
+{
+	HWND hTab;
+	
+	hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	
+	if(hTab)
+	{
+		DestroyWindow(hTab);
+		g_hash_table_remove(win7_hwnd_conv, hTab);
+	}
+	
+	g_hash_table_remove(win7_conv_hwnd, conv);
+}
+
+static void
+win7_init_conv_windows(ITaskbarList3 *itl)
+{
+	WNDCLASSEX wcex;
+	GList *convs;
+	PurpleConversation *conv;
+	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	DWORD lasterror;
+	ATOM thumbcls;
+
+	if (win7_hwnd_conv == NULL)
+		win7_hwnd_conv = g_hash_table_new(NULL, NULL);
+	if (win7_conv_hwnd == NULL)
+		win7_conv_hwnd = g_hash_table_new(NULL, NULL);
+	
+	wcex.cbSize 		= sizeof(wcex);
+	wcex.style			= 0;
+	wcex.lpfnWndProc	= (WNDPROC) win7_conv_handler;  //DefWindowProc;
+	wcex.cbClsExtra		= 0;
+	wcex.cbWndExtra		= 0;
+	wcex.hInstance		= winpidgin_exe_hinstance();
+	wcex.hIcon			= NULL;
+	wcex.hCursor		= NULL,
+	wcex.hbrBackground	= NULL;
+	wcex.lpszMenuName	= NULL;
+	wcex.lpszClassName	= wname;
+	wcex.hIconSm		= NULL;
+	thumbcls = RegisterClassEx(&wcex);
+	lasterror = GetLastError();
+	if (lasterror)
+		purple_debug_error("win7", "RegisterClassEx error %d\n", lasterror);
+	else
+		purple_debug_info("win7", "RegisterClassEx %d\n", thumbcls);
+	
+	//loop over all conversations
+	convs = purple_get_conversations();
+	for(; convs; convs = g_list_next(convs))
+	{
+		//apply the on_conv_create to them
+		conv = (PurpleConversation *) convs->data;
+		on_conv_create(conv, itl);
+	}
+}
+
+static void
+win7_destroy_conv_windows(ITaskbarList3 *itl)
+{
+	GList *convs;
+	PurpleConversation *conv;
+	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	
+	//loop over all conversations
+	convs = purple_get_conversations();
+	for(; convs; convs = g_list_next(convs))
+	{
+		//apply the on_conv_delete to them
+		conv = (PurpleConversation *) convs->data;
+		on_conv_delete(conv, itl);
+	}
+	
+	UnregisterClass(wname, NULL);
+}
+
+static void
+on_conv_switch(PurpleConversation *conv, gpointer user_data)
+{
+	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
+	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
+	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
+	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	
+	purple_debug_info("win7", "on_conv_switch (%i, %i)\n", hWin, hTab);
+
+	if (!hTab)
+		hTab = win7_create_hiddenwin(conv);
+	
+	itl->lpVtbl->SetTabActive(itl, hTab, hWin, 0);
+}
+static void
+on_conv_delete(PurpleConversation *conv, gpointer user_data)
+{
+	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
+	//PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
+	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+
+	purple_debug_info("win7", "on_conv_delete (%i)\n", hTab);
+	
+	if (hTab)
+		itl->lpVtbl->UnregisterTab(itl, hTab);
+	
+	win7_destroy_hiddenwin(conv);
+}
+static void
+on_conv_create(PurpleConversation *conv, gpointer user_data)
+{
+	const gchar *label;
+	wchar_t *wlabel;
+	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
+	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
+	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
+	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+
+	purple_debug_info("win7", "on_conv_create (%i, %i)\n", hWin, hTab);
+	
+	if (!hTab)
+		hTab = win7_create_hiddenwin(conv);
+	
+	itl->lpVtbl->RegisterTab(itl, hTab, hWin);
+	itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
+	
+	label = gtk_label_get_text(GTK_LABEL(pconv->tab_label));
+	wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);
+	itl->lpVtbl->SetThumbnailTooltip(itl, hTab, wlabel);
+	g_free(wlabel);
+}
+
 static gboolean
 blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data)
 {
@@ -11,6 +240,8 @@ blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data)
 	// Prevent the window from being closed,
 	// minimise instead
 	gtk_window_iconify(GTK_WINDOW(w));
+	
+	// return true to prevent the event from propegating
 	return TRUE;
 }
 
@@ -533,7 +764,8 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 	return psl;
 }
 
-void pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLinks)
+static void
+pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLinks)
 {
 	//IObjectCollection *shellLinks;
 	IShellLink *shellLink;
@@ -547,6 +779,8 @@ void pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shel
 		gchar *pidgin_dir = g_path_get_dirname(pidgin_path);
 		purple_debug_info("win7", "pidgin_dir %s\n", pidgin_dir);
 		gchar *iconpath;
+		
+		//TODO add tasks for sending a new message
 		
 		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\available.png");
 		shellLink = pidgin_win7_create_shell_link(_("Available"), iconpath, pidgin_path, "--protocolhandler=win7:update?status=available", NULL);
@@ -580,6 +814,8 @@ void pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shel
 		
 		//GList *list = purple_savedstatuses_get_popular(6);
 		//title = purple_savedstatus_get_title
+		
+		//TODO Add in the quit task with a seperator
 
 		IObjectArray *jumplist_items_array;
 		hr = shellLinks->lpVtbl->QueryInterface(shellLinks, &IID_IObjectArray, (void **)&jumplist_items_array);

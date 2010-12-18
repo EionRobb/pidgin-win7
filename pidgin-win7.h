@@ -26,6 +26,8 @@
 #include "gtkft.h"
 #include "gtkblist.h"
 #include "pidginstock.h"
+#include "gtkconv.h"
+#include "gtkconvwin.h"
 
 #ifndef _
 #define _(a) (a)
@@ -48,13 +50,12 @@
 #define __RPC__deref_out_opt
 #endif
 
-/* Forward Declarations */ 
+/* Forward Declarations */
 
 #ifndef __IObjectArray_FWD_DEFINED__
 #define __IObjectArray_FWD_DEFINED__
 typedef interface IObjectArray IObjectArray;
 #endif 	/* __IObjectArray_FWD_DEFINED__ */
-
 
 #ifndef __IObjectCollection_FWD_DEFINED__
 #define __IObjectCollection_FWD_DEFINED__
@@ -480,17 +481,49 @@ interface ITaskbarList3
 	CONST_VTBL struct ITaskbarList3Vtbl *lpVtbl;
 };
 
+#ifndef WM_DWMSENDICONICTHUMBNAIL
+#	define WM_DWMSENDICONICTHUMBNAIL           0x0323
+#endif
+#ifndef WM_DWMSENDICONICLIVEPREVIEWBITMAP
+#	define WM_DWMSENDICONICLIVEPREVIEWBITMAP   0x0326
+#endif
+
+enum {
+	DWMWA_NCRENDERING_ENABLED = 1,
+	DWMWA_NCRENDERING_POLICY,
+	DWMWA_TRANSITIONS_FORCEDISABLED,
+	DWMWA_ALLOW_NCPAINT,
+	DWMWA_CAPTION_BUTTON_BOUNDS,
+	DWMWA_NONCLIENT_RTL_LAYOUT,
+	DWMWA_FORCE_ICONIC_REPRESENTATION,
+	DWMWA_FLIP3D_POLICY,
+	DWMWA_EXTENDED_FRAME_BOUNDS,
+	DWMWA_HAS_ICONIC_BITMAP,
+	DWMWA_DISALLOW_PEEK,
+	DWMWA_EXCLUDED_FROM_PEEK,
+	DWMWA_LAST
+};
+
+extern HRESULT DwmSetWindowAttribute(HWND hwnd, DWORD attr, LPCVOID attrValue, DWORD attrSize);
+extern HRESULT DwmSetIconicThumbnail(HWND hwnd, HBITMAP hbmp, DWORD dwSITFlags);
+
+G_MODULE_EXPORT LRESULT CALLBACK win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
 void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl);
 void pidgin_win7_delete_jumplist(ICustomDestinationList *pcdl);
 IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
 	const char *path, const char *args, const char *description);
-void pidgin_win7_add_tasks();
+static void pidgin_win7_add_tasks();
 
 static void ft_update(PurpleXfer *xfer, gpointer data);
 static gboolean uri_handler(const char *proto, const char *cmd, GHashTable *params);
 static void pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old);
 static gboolean blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data);
+static void on_conv_switch(PurpleConversation *conv, gpointer user_data);
+static void on_conv_delete(PurpleConversation *conv, gpointer user_data);
+static void on_conv_create(PurpleConversation *conv, gpointer user_data);
+static void win7_init_conv_windows(ITaskbarList3 *itl);
+static void win7_destroy_conv_windows(ITaskbarList3 *itl);
 
 typedef struct {
 	ICustomDestinationList *pcdl;
@@ -530,32 +563,42 @@ plugin_load(PurplePlugin *plugin)
 		purple_signal_connect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 		purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 		purple_signal_connect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+	
+		PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+		// The buddy list MUST be shown before we put the taskbar icon on it
+		purple_blist_show();
+		purple_blist_set_visible(TRUE);
+
+		if (blist && blist->window)
+			store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
+		purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
+
+		pidgin_blist_visibility_manager_add();
+		
+		if (blist && blist->window)
+		{
+			// Hijack the signal when the window is closed from pidgin
+			guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
+			store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
+								signal_id, 0, NULL, NULL, NULL);
+			g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
+		}
+		
+		// Update the icon in the taskbar
+		pidgin_on_status_change(purple_savedstatus_get_current(), NULL);
+		
+		// Connect to the signals for creating, deleting, focusing conversations
+		purple_signal_connect(pidgin_conversations_get_handle(), "conversation-switched", plugin, PURPLE_CALLBACK(on_conv_switch), store->itl);
+		purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin, PURPLE_CALLBACK(on_conv_delete), store->itl);
+		purple_signal_connect(purple_conversations_get_handle(), "conversation-created", plugin, PURPLE_CALLBACK(on_conv_create), store->itl);
+		
+		win7_init_conv_windows(store->itl);
+		// TODO call DwmSetWindowAttribute() to notify that we support thumbnails
+		// TODO listen for the WM_DWMSENDICONICTHUMBNAIL winapi event and call DwmSetIconicThumbnail()
+		
 	} else {
 		return FALSE;
 	}
-	
-	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
-	// The buddy list MUST be shown before we put the taskbar icon on it
-	purple_blist_show();
-	purple_blist_set_visible(TRUE);
-
-	if (blist && blist->window)
-		store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
-	purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
-
-	pidgin_blist_visibility_manager_add();
-	
-	if (blist && blist->window)
-	{
-		// Hijack the signal when the window is closed from pidgin
-		guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
-		store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
-							signal_id, 0, NULL, NULL, NULL);
-		g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
-	}
-	
-	// Update the icon in the taskbar
-	pidgin_on_status_change(purple_savedstatus_get_current(), NULL);
 	
 	return TRUE;
 }
@@ -583,6 +626,8 @@ plugin_unload(PurplePlugin *plugin)
 		purple_signal_disconnect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update));
 		purple_signal_disconnect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update));
 		purple_signal_disconnect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update));
+		
+		win7_destroy_conv_windows(store->itl);
 	}
 	
 	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
@@ -626,7 +671,7 @@ static PurplePluginInfo info =
 	PURPLE_PRIORITY_DEFAULT,
 
 	"eionrobb-pidgin-win7",
-	"Pidgin-Win7",
+	"Windows 7",
 	"0.1",
 	"Win7 Extensions for Pidgin",
 	"",
