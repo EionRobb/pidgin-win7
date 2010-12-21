@@ -16,7 +16,7 @@ clean:
 	rm -f pidgin-win7.dll
 
 pidgin-win7.dll:	pidgin-win7.c pidgin-win7.h
-	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -g -O2 -pipe $< -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS} -Wl,--strip-all
+	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -O2 -pipe $< -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS} -Wl,--strip-all
 	upx $@
 
 pidgin-win7-debug.dll:	pidgin-win7.c pidgin-win7.h

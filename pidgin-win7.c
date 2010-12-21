@@ -4,6 +4,23 @@
 #include "pidgin-win7.h"
 
 
+static void
+win7_blist_set_visible(PurpleBuddyList *list, gboolean show)
+{
+	PidginBuddyList *gtkblist = pidgin_blist_get_default_gtk_blist();
+	
+	if (!(gtkblist && gtkblist->window))
+		return;
+	
+	if (show) {
+		pidgin_old_set_visible(list, show);
+	} else {
+		if (!GTK_WIDGET_VISIBLE(gtkblist->window))
+			gtk_widget_show(gtkblist->window);
+		gtk_window_iconify(GTK_WINDOW(gtkblist->window));
+	}
+}
+
 static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
 
 #define GDK_PIXMAP_HBITMAP(pixmap)    (GDK_DRAWABLE_IMPL_WIN32(((GdkPixmapObject *)pixmap)->impl)->handle)
@@ -11,6 +28,21 @@ static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBI
 static GHashTable *win7_conv_hwnd = NULL;
 // HWND -> Conversation  map
 static GHashTable *win7_hwnd_conv = NULL;
+
+/* From pidginsnarl */
+static void
+showConversation(PurpleConversation *conv){
+	if(conv){
+		PidginConversation *gtkconv = PIDGIN_CONVERSATION(conv);
+		pidgin_conv_switch_active_conversation(conv);
+		pidgin_conv_present_conversation(conv);
+		if(gtkconv != NULL && gtkconv->win != NULL){
+			pidgin_conv_window_switch_gtkconv(gtkconv->win, gtkconv);
+			gtk_window_present(GTK_WINDOW(gtkconv->win->window));
+			pidgin_conv_window_raise(gtkconv->win);
+		}
+	}
+}
 
 LRESULT CALLBACK 
 win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
@@ -20,38 +52,49 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	HBITMAP hbitmap, mask;
 	GdkPixbuf *pixbuf;
 	GdkColormap *cmap;
+	BOOL fForceIconic = TRUE;
+	BOOL fHasIconicBitmap = TRUE;
 	
 	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
 	pconv = PIDGIN_CONVERSATION(conv);
 	
-	purple_debug_info("win7", "conv_handler %d %u\n", hwnd, msg);
-	
 	switch(msg)
 	{
 		case WM_CREATE:
+		{
+			DwmSetWindowAttribute(hwnd, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+				&fForceIconic, sizeof(fForceIconic));
+			
+			DwmSetWindowAttribute(hwnd, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+				sizeof(fHasIconicBitmap));
 			// Create taskbar buttons?
 			//TODO We dont have thumbnail buttons yet
 			purple_debug_info("win7", "wm_create\n");
-			break;
+		}	break;
 		case WM_CLOSE:
+		{
 			// Handle the thumbnail close button
 			purple_debug_info("win7", "wm_close\n");
 			purple_conversation_destroy(conv);
-			break;
+		}	break;
 		case WM_ACTIVATE:
+		{
 			// Handle the thumbnail being clicked on
-			purple_debug_info("win7", "wm_activate\n");
-			purple_conversation_present(conv);
-			break;
+			//purple_debug_info("win7", "wm_activate\n");
+			//showConversation(conv);
+			//if (pconv && pconv->win)
+			//	pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
+		}	break;
 		case WM_COMMAND:
+		{
 			// Handle one of the buttons on the thumbnail being pressed
 			//TODO We dont have thumbnail buttons yet
 			purple_debug_info("win7", "wm_command\n");
-			break;
+		}	break;
 		case WM_DWMSENDICONICTHUMBNAIL:
+		{
 			// Thumbnail needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconicthumbnail\n");
-			
 			/*cmap = gdk_window_get_colormap(pconv->win->window);
 			pixbuf = gdk_pixbuf_get_from_drawable(NULL, pconv->win->window, cmap, 0, 0, 0, 0, 200, 200);
 			
@@ -59,12 +102,13 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			DeleteObject (mask);
 			
 			DwmSetIconicThumbnail(hwnd, hbitmap, 0);*/
-			break;
+		}	break;
 		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
+		{
 			// Preview needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconiclivepreviewbitmap\n");
 			//DwmSetIconicLivePreviewBitmap();
-			break;
+		}	break;
 	}
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
@@ -86,15 +130,6 @@ win7_create_hiddenwin(PurpleConversation *conv)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 	else
 		purple_debug_info("win7", "CreateWindow %d\n", hTab);
-	
-	BOOL fForceIconic = TRUE;
-	BOOL fHasIconicBitmap = TRUE;
-	
-	DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
-		&fForceIconic, sizeof(fForceIconic));
-	
-	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
-		sizeof(fHasIconicBitmap));
 	
 	g_hash_table_insert(win7_conv_hwnd, conv, hTab);
 	g_hash_table_insert(win7_hwnd_conv, hTab, conv);

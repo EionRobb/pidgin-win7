@@ -525,6 +525,9 @@ static void on_conv_create(PurpleConversation *conv, gpointer user_data);
 static void win7_init_conv_windows(ITaskbarList3 *itl);
 static void win7_destroy_conv_windows(ITaskbarList3 *itl);
 
+static void (*pidgin_old_set_visible)(PurpleBuddyList *list, gboolean show);
+static void win7_blist_set_visible(PurpleBuddyList *list, gboolean show);
+
 typedef struct {
 	ICustomDestinationList *pcdl;
 	ITaskbarList3 *itl;
@@ -564,6 +567,11 @@ plugin_load(PurplePlugin *plugin)
 		purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 		purple_signal_connect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 	
+		// Hijack the pidgin_blist_set_visible function
+		PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
+		pidgin_old_set_visible = ops->set_visible;
+		ops->set_visible = win7_blist_set_visible;
+		
 		PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
 		// The buddy list MUST be shown before we put the taskbar icon on it
 		purple_blist_show();
@@ -643,6 +651,11 @@ plugin_unload(PurplePlugin *plugin)
 
 	g_signal_handler_unblock(blist->window, store->pidgin_destroy_handler_id);
 	purple_signal_disconnect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change));
+	
+	// Un-hijack the pidgin_blist_set_visible function
+	PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
+	if (ops->set_visible == win7_blist_set_visible)
+		ops->set_visible = pidgin_old_set_visible;
 	
 	pidgin_blist_visibility_manager_remove();
 	
