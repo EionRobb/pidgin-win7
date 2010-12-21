@@ -512,7 +512,7 @@ G_MODULE_EXPORT LRESULT CALLBACK win7_conv_handler(HWND hwnd, UINT msg, WPARAM w
 void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl);
 void pidgin_win7_delete_jumplist(ICustomDestinationList *pcdl);
 IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
-	const char *path, const char *args, const char *description);
+	gint icon_num, const char *path, const char *args, const char *description);
 static void pidgin_win7_add_tasks();
 
 static void ft_update(PurpleXfer *xfer, gpointer data);
