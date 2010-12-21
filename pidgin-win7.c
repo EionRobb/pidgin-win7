@@ -596,9 +596,15 @@ pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old)
 {
 	purple_debug_info("win7", "pidgin_on_status_change\n");
 	
+	if(!this_plugin || !this_plugin->extra)
+		return;
+	
 	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
 	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
 	HWND blist_window = GDK_WINDOW_HWND(gtk_widget_get_window(blist->window));
+	
+	if (!itl || !blist)
+		return;
 	
 	if (new == NULL)
 	{
@@ -767,7 +773,7 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 	{
 		if (icon != NULL)
 		{
-			psl->lpVtbl->SetIconLocation(psl, icon, icon_index);
+			psl->lpVtbl->SetIconLocation(psl, g_strdup(icon), icon_index);
 		}
 		if (path != NULL)
 		{
@@ -811,38 +817,31 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 	{
 		gchar *pidgin_path = g_find_program_in_path("pidgin");
 		purple_debug_info("win7", "pidgin_path %s\n", pidgin_path);
-		gchar *pidgin_dir = g_path_get_dirname(pidgin_path);
-		purple_debug_info("win7", "pidgin_dir %s\n", pidgin_dir);
 		const gchar *iconpath = this_plugin->path;
 		
 		//TODO add tasks for sending a new message
 		
-		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\available.png");
 		shellLink = pidgin_win7_create_shell_link(_("Available"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=available", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		g_free(iconpath);
 		
-		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\away.png");
-		shellLink = pidgin_win7_create_shell_link(_("Away"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=away", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Away"), iconpath, 1, pidgin_path, "--protocolhandler=win7:update?status=away", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		g_free(iconpath);
 		
-		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\busy.png");
-		shellLink = pidgin_win7_create_shell_link(_("Do not disturb"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=unavailable", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Do not disturb"), iconpath, 2, pidgin_path, "--protocolhandler=win7:update?status=unavailable", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		g_free(iconpath);
 		
-		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\invisible.png");
-		shellLink = pidgin_win7_create_shell_link(_("Invisible"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=invisible", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Invisible"), iconpath, 3, pidgin_path, "--protocolhandler=win7:update?status=invisible", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		g_free(iconpath);
 		
-		iconpath = g_strconcat(pidgin_dir, "\\pixmaps\\status\\16\\offline.png");
-		shellLink = pidgin_win7_create_shell_link(_("Offline"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=offline", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Offline"), iconpath, 4, pidgin_path, "--protocolhandler=win7:update?status=offline", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		g_free(iconpath);
@@ -863,6 +862,5 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		shellLinks->lpVtbl->Release(shellLinks);
 		
 		g_free(pidgin_path);
-		g_free(pidgin_dir);
 	}
 }
