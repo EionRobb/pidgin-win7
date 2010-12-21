@@ -1,0 +1,33 @@
+1 VERSIONINFO
+FILEVERSION 0,4,0,0
+PRODUCTVERSION 0,4,0,0
+FILEFLAGSMASK 0
+FILEFLAGS 0
+FILEOS 0x40004 // VOS_NT_WINDOWS32
+FILETYPE 0x2 //VFT_DLL
+{
+BLOCK "StringFileInfo"
+{
+	BLOCK "040904B0" // U.S. English, Unicode
+	{
+		VALUE "CompanyName", "Eion Robb\0"
+		VALUE "FileDescription", "Windows 7 Extensions for Pidgin\0"
+		VALUE "FileVersion", "0.4"
+		VALUE "InternalName", "pidgin-win7"
+		VALUE "LegalCopyright", "Copyright (C) 1998-2010 The Pidgin developer community (See the COPYRIGHT file in the source distribution)."
+		VALUE "OriginalFilename", "pidgin.dll"
+		VALUE "ProductName", "Win7Pidgin"
+		VALUE "ProductVersion", "0.4"
+	}
+}
+BLOCK "VarFileInfo"
+{
+	VALUE "Translation", 0x0409, 0x04B0 // U.S. English, Unicode
+}
+}
+
+1		ICON	"available.ico"
+2		ICON	"away.ico"
+3		ICON	"busy.ico"
+4		ICON	"invisible.ico"
+5		ICON	"offline.ico"

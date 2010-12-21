@@ -15,10 +15,13 @@ all:	pidgin-win7.dll
 clean:
 	rm -f pidgin-win7.dll
 
-pidgin-win7.dll:	pidgin-win7.c pidgin-win7.h
-	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -O2 -pipe $< -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS} -Wl,--strip-all
+pidgin-win7.res:	pidgin-win7.rc
+	${WIN32_WINDRES} -i $< -O coff -o $@
+
+pidgin-win7.dll:	pidgin-win7.c pidgin-win7.h pidgin-win7.res
+	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -O2 -pipe $< pidgin-win7.res -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS} -Wl,--strip-all -mms-bitfields -Wl,--enable-auto-image-base
 	upx $@
 
-pidgin-win7-debug.dll:	pidgin-win7.c pidgin-win7.h
-	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -g -O2 -pipe $< -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS}
+pidgin-win7-debug.dll:	pidgin-win7.c pidgin-win7.h pidgin-win7.res
+	${WIN32_COMPILER} ${LIBPURPLE_CFLAGS} ${PIDGIN_CFLAGS} -Wall -I. -g -O2 -pipe $< pidgin-win7.res -o $@ -shared -mno-cygwin ${WIN32_CFLAGS} ${WIN32_LIBS} -mms-bitfields -Wl,--enable-auto-image-base
 
