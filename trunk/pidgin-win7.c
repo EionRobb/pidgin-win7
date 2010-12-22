@@ -22,8 +22,9 @@ win7_blist_set_visible(PurpleBuddyList *list, gboolean show)
 }
 
 static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
+static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
+static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
 
-#define GDK_PIXMAP_HBITMAP(pixmap)    (GDK_DRAWABLE_IMPL_WIN32(((GdkPixmapObject *)pixmap)->impl)->handle)
 // Conversation -> HWND  map
 static GHashTable *win7_conv_hwnd = NULL;
 // HWND -> Conversation  map
@@ -52,21 +53,17 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	HBITMAP hbitmap, mask;
 	GdkPixbuf *pixbuf;
 	GdkColormap *cmap;
-	BOOL fForceIconic = TRUE;
-	BOOL fHasIconicBitmap = TRUE;
 	
 	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
+	if (!conv)
+		return DefWindowProc(hwnd, msg, wparam, lparam);
 	pconv = PIDGIN_CONVERSATION(conv);
 	
 	switch(msg)
 	{
 		case WM_CREATE:
 		{
-			DwmSetWindowAttribute(hwnd, DWMWA_FORCE_ICONIC_REPRESENTATION, 
-				&fForceIconic, sizeof(fForceIconic));
 			
-			DwmSetWindowAttribute(hwnd, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
-				sizeof(fHasIconicBitmap));
 			// Create taskbar buttons?
 			//TODO We dont have thumbnail buttons yet
 			purple_debug_info("win7", "wm_create\n");
@@ -81,9 +78,8 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		{
 			// Handle the thumbnail being clicked on
 			//purple_debug_info("win7", "wm_activate\n");
-			//showConversation(conv);
-			//if (pconv && pconv->win)
-			//	pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
+			showConversation(conv);
+			return TRUE;
 		}	break;
 		case WM_COMMAND:
 		{
@@ -95,13 +91,64 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		{
 			// Thumbnail needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconicthumbnail\n");
-			/*cmap = gdk_window_get_colormap(pconv->win->window);
+			/*cmap = gtk_widget_get_colormap(pconv->win->window);
 			pixbuf = gdk_pixbuf_get_from_drawable(NULL, pconv->win->window, cmap, 0, 0, 0, 0, 200, 200);
 			
 			pixbuf_to_hbitmaps_normal(pixbuf, &hbitmap, &mask);
 			DeleteObject (mask);
 			
 			DwmSetIconicThumbnail(hwnd, hbitmap, 0);*/
+			gconstpointer data = NULL;
+			PurpleStoredImage *custom_img = NULL;
+			size_t len;
+			/*PurpleAccount *account = purple_conversation_get_account(conv);
+			PurpleBuddy *buddy = purple_find_buddy(account, purple_conversation_get_name(conv));
+			if (buddy)
+			{
+				PurpleContact *contact = purple_buddy_get_contact(buddy);
+				if (contact)
+				{
+					custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)contact);
+					if (custom_img)
+					{
+						data = purple_imgstore_get_data(custom_img);
+						len = purple_imgstore_get_size(custom_img);
+					}
+				}
+			}*/
+			if (data == NULL)
+			{
+				PurpleBuddyIcon *icon = purple_conv_im_get_icon(PURPLE_CONV_IM(conv));
+				if (icon)
+				{
+					data = purple_buddy_icon_get_data(icon, &len);
+				}
+			}
+			
+			GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+			gdk_pixbuf_loader_write(loader, data, len, NULL);
+			gdk_pixbuf_loader_close(loader, NULL);
+			
+			purple_imgstore_unref(custom_img);
+			
+			pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+			gint original_width = gdk_pixbuf_get_width (pixbuf);
+			gint original_height = gdk_pixbuf_get_height (pixbuf);
+			gint maxwidth = HIWORD(lparam);
+			gint maxheight = LOWORD(lparam);
+			gint size = MIN( maxwidth, maxheight );
+			purple_debug_info("win7", "max size %d x %d\n", maxwidth, maxheight);
+			purple_debug_info("win7", "scale to %d x %d\n", size, size);
+			pixbuf = gdk_pixbuf_scale_simple(pixbuf, size, size, GDK_INTERP_BILINEAR);
+			purple_debug_info("win7", "scaled %d\n", pixbuf);
+			
+			pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
+			DeleteObject(mask);
+			
+			purple_debug_info("win7", "seticonicthumbnail (%d, %d)\n", hwnd, hbitmap);
+			DwmSetIconicThumbnail(hwnd, hbitmap, 0);
+			DeleteObject(hbitmap);
+			
 		}	break;
 		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
 		{
@@ -119,6 +166,9 @@ win7_create_hiddenwin(PurpleConversation *conv)
 {
 	HWND hTab;
 	DWORD lasterror;
+	GdkPixbuf *icon;
+	BOOL fForceIconic = TRUE;
+	BOOL fHasIconicBitmap = TRUE;
 	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
 	
 	purple_debug_info("win7", "Wname %s, DesktopWin %d, hInstance %d, modulehandle %d\n", wname, GetDesktopWindow(), winpidgin_exe_hinstance(), GetModuleHandle(NULL));
@@ -130,6 +180,23 @@ win7_create_hiddenwin(PurpleConversation *conv)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 	else
 		purple_debug_info("win7", "CreateWindow %d\n", hTab);
+
+	if (hTab)
+	{
+		// Set the icon for the 'window'
+		icon = pidgin_conv_get_tab_icon(conv, FALSE);
+		if (icon)
+		{
+			SendMessage(hTab, WM_SETICON, ICON_SMALL, pixbuf_to_hicon(icon));
+			g_object_unref(icon);
+		}
+	}
+	
+	DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+		&fForceIconic, sizeof(fForceIconic));
+	
+	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+		sizeof(fHasIconicBitmap));
 	
 	g_hash_table_insert(win7_conv_hwnd, conv, hTab);
 	g_hash_table_insert(win7_hwnd_conv, hTab, conv);
@@ -824,27 +891,22 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		shellLink = pidgin_win7_create_shell_link(_("Available"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=available", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
-		g_free(iconpath);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Away"), iconpath, 1, pidgin_path, "--protocolhandler=win7:update?status=away", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
-		g_free(iconpath);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Do not disturb"), iconpath, 2, pidgin_path, "--protocolhandler=win7:update?status=unavailable", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
-		g_free(iconpath);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Invisible"), iconpath, 3, pidgin_path, "--protocolhandler=win7:update?status=invisible", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
-		g_free(iconpath);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Offline"), iconpath, 4, pidgin_path, "--protocolhandler=win7:update?status=offline", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
 		shellLink->lpVtbl->Release(shellLink);
-		g_free(iconpath);
 		
 		//GList *list = purple_savedstatuses_get_popular(6);
 		//title = purple_savedstatus_get_title
