@@ -22,6 +22,7 @@
 #include "status.h"
 #include "plugin.h"
 #include "debug.h"
+#include "buddyicon.h"
 
 #include "gtkft.h"
 #include "gtkblist.h"
