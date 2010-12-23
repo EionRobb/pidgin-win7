@@ -143,10 +143,10 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			purple_debug_info("win7", "scaled %d\n", pixbuf);
 			
 			pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-			DeleteObject(mask);
 			
 			purple_debug_info("win7", "seticonicthumbnail (%d, %d)\n", hwnd, hbitmap);
-			DwmSetIconicThumbnail(hwnd, hbitmap, 0);
+			DwmSetIconicThumbnail(hwnd, hbitmap, 1);
+			DeleteObject(mask);
 			DeleteObject(hbitmap);
 			
 		}	break;
