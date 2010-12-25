@@ -677,7 +677,7 @@ static PurplePluginInfo info =
 {
 	PURPLE_PLUGIN_MAGIC,
 	2,
-	0,
+	5,
 	PURPLE_PLUGIN_STANDARD,
 	PIDGIN_PLUGIN_TYPE,
 	0,
@@ -690,7 +690,7 @@ static PurplePluginInfo info =
 	"Win7 Extensions for Pidgin",
 	"",
 	"Eion Robb <eionrobb@gmail.com>",
-	"", //URL
+	"http://pidgin-win7.googlecode.com/", //URL
 	
 	plugin_load,
 	plugin_unload,

@@ -51,8 +51,8 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	PurpleConversation *conv;
 	PidginConversation *pconv;
 	HBITMAP hbitmap, mask;
-	GdkPixbuf *pixbuf;
-	GdkColormap *cmap;
+	GdkPixbuf *pixbuf = NULL;
+	GdkColormap *cmap = NULL;
 	
 	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
 	if (!conv)
@@ -124,30 +124,39 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					data = purple_buddy_icon_get_data(icon, &len);
 				}
 			}
+			if (data == NULL)
+			{
+				pixbuf = pidgin_conv_get_tab_icon(conv, FALSE);
+			}
 			
-			GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-			gdk_pixbuf_loader_write(loader, data, len, NULL);
-			gdk_pixbuf_loader_close(loader, NULL);
-			
-			purple_imgstore_unref(custom_img);
-			
-			pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
-			gint original_width = gdk_pixbuf_get_width (pixbuf);
-			gint original_height = gdk_pixbuf_get_height (pixbuf);
-			gint maxwidth = HIWORD(lparam);
-			gint maxheight = LOWORD(lparam);
-			gint size = MIN( maxwidth, maxheight );
-			purple_debug_info("win7", "max size %d x %d\n", maxwidth, maxheight);
-			purple_debug_info("win7", "scale to %d x %d\n", size, size);
-			pixbuf = gdk_pixbuf_scale_simple(pixbuf, size, size, GDK_INTERP_BILINEAR);
-			purple_debug_info("win7", "scaled %d\n", pixbuf);
-			
-			pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-			
-			purple_debug_info("win7", "seticonicthumbnail (%d, %d)\n", hwnd, hbitmap);
-			DwmSetIconicThumbnail(hwnd, hbitmap, 1);
-			DeleteObject(mask);
-			DeleteObject(hbitmap);
+			if (data && len && !pixbuf)
+			{
+				GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+				gdk_pixbuf_loader_write(loader, data, len, NULL);
+				gdk_pixbuf_loader_close(loader, NULL);
+				
+				purple_imgstore_unref(custom_img);
+				pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+			}
+			if (pixbuf)
+			{
+				gint original_width = gdk_pixbuf_get_width (pixbuf);
+				gint original_height = gdk_pixbuf_get_height (pixbuf);
+				gint maxwidth = HIWORD(lparam);
+				gint maxheight = LOWORD(lparam);
+				gint size = MIN( maxwidth, maxheight );
+				purple_debug_info("win7", "max size %d x %d\n", maxwidth, maxheight);
+				purple_debug_info("win7", "scale to %d x %d\n", size, size);
+				pixbuf = gdk_pixbuf_scale_simple(pixbuf, size, size, GDK_INTERP_BILINEAR);
+				purple_debug_info("win7", "scaled %d\n", pixbuf);
+				
+				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
+				
+				purple_debug_info("win7", "seticonicthumbnail (%d, %d)\n", hwnd, hbitmap);
+				DwmSetIconicThumbnail(hwnd, hbitmap, 1);
+				DeleteObject(mask);
+				DeleteObject(hbitmap);
+			}
 			
 		}	break;
 		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
