@@ -77,7 +77,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		case WM_ACTIVATE:
 		{
 			// Handle the thumbnail being clicked on
-			//purple_debug_info("win7", "wm_activate\n");
+			purple_debug_info("win7", "wm_activate\n");
 			showConversation(conv);
 			return TRUE;
 		}	break;
@@ -169,6 +169,28 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	return DefWindowProc(hwnd, msg, wparam, lparam);
 }
 
+static void
+win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer user_data)
+{
+	HWND hTab;
+	GdkPixbuf *icon;
+	
+	hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	if (hTab)
+	{
+		// Set the icon for the 'window'
+		icon = pidgin_conv_get_tab_icon(conv, FALSE);
+		if (icon)
+		{
+			SendMessage(hTab, WM_SETICON, ICON_SMALL, pixbuf_to_hicon(icon));
+			g_object_unref(icon);
+		}
+		
+		// Set the title for the 'window'
+		SendMessage(hTab, WM_SETTEXT, 0, purple_conversation_get_title(conv));
+	}
+}
+
 /* Create hidden window to process convtab messages */
 static HWND 
 win7_create_hiddenwin(PurpleConversation *conv)
@@ -190,22 +212,16 @@ win7_create_hiddenwin(PurpleConversation *conv)
 	else
 		purple_debug_info("win7", "CreateWindow %d\n", hTab);
 
-	if (hTab)
+	win7_update_icon(conv, PURPLE_CONV_UPDATE_ICON, NULL);
+	
+	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
 	{
-		// Set the icon for the 'window'
-		icon = pidgin_conv_get_tab_icon(conv, FALSE);
-		if (icon)
-		{
-			SendMessage(hTab, WM_SETICON, ICON_SMALL, pixbuf_to_hicon(icon));
-			g_object_unref(icon);
-		}
+		DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+			&fForceIconic, sizeof(fForceIconic));
+		
+		DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+			sizeof(fHasIconicBitmap));
 	}
-	
-	DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
-		&fForceIconic, sizeof(fForceIconic));
-	
-	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
-		sizeof(fHasIconicBitmap));
 	
 	g_hash_table_insert(win7_conv_hwnd, conv, hTab);
 	g_hash_table_insert(win7_hwnd_conv, hTab, conv);

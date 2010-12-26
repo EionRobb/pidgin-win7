@@ -529,6 +529,15 @@ static void win7_destroy_conv_windows(ITaskbarList3 *itl);
 static void (*pidgin_old_set_visible)(PurpleBuddyList *list, gboolean show);
 static void win7_blist_set_visible(PurpleBuddyList *list, gboolean show);
 
+static void win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer user_data);
+
+#define PREF_PREFIX 	"/plugins/gtk/eionrobb-pidgin-win7"
+#define PREF_JUMPLIST		PREF_PREFIX "/jumplist-enable"
+#define PREF_OVERLAY_ICON	PREF_PREFIX "/overlay-icon-enable"
+#define PREF_CONV_WIN		PREF_PREFIX "/seperate-conv-windows"
+#define	PREF_TAB_THUMBS		PREF_PREFIX "/show-tab-thumbnails"
+#define PREF_FILE_PROGRESS	PREF_PREFIX "/show-transfer-progress"
+
 typedef struct {
 	ICustomDestinationList *pcdl;
 	ITaskbarList3 *itl;
@@ -542,68 +551,77 @@ plugin_load(PurplePlugin *plugin)
 	PidginWin7Store *store;
 	purple_debug_info("win7", "plugin_load\n");
 	
-	purple_blist_show();
-	
 	store = g_new0(PidginWin7Store, 1);
 	plugin->extra = store;
 	
-	if (SUCCEEDED(CoCreateInstance(&CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER, &IID_ICustomDestinationList, (void**)&store->pcdl)))
+	if (purple_prefs_get_bool(PREF_JUMPLIST))
 	{
-		pidgin_win7_create_jumplist(store->pcdl);
-		
-		purple_signal_connect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uri_handler), NULL);
-	} else {
-		return FALSE;
+		if (SUCCEEDED(CoCreateInstance(&CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER, &IID_ICustomDestinationList, (void**)&store->pcdl)))
+		{
+			pidgin_win7_create_jumplist(store->pcdl);
+			
+			purple_signal_connect(purple_get_core(), "uri-handler", plugin, PURPLE_CALLBACK(uri_handler), NULL);
+		} else {
+			return FALSE;
+		}
 	}
 	
 	if (SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (void**)&store->itl)))
 	{
-		void *ft_handle = purple_xfers_get_handle();
-		purple_signal_connect(ft_handle, "file-recv-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-recv-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-recv-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-recv-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-send-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-		purple_signal_connect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
-	
-		// Hijack the pidgin_blist_set_visible function
-		PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
-		pidgin_old_set_visible = ops->set_visible;
-		ops->set_visible = win7_blist_set_visible;
-		
-		PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
-		// The buddy list MUST be shown before we put the taskbar icon on it
-		purple_blist_show();
-		purple_blist_set_visible(TRUE);
-
-		if (blist && blist->window)
-			store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
-		purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
-
-		pidgin_blist_visibility_manager_add();
-		
-		if (blist && blist->window)
+		if (purple_prefs_get_bool(PREF_FILE_PROGRESS))
 		{
-			// Hijack the signal when the window is closed from pidgin
-			guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
-			store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
-								signal_id, 0, NULL, NULL, NULL);
-			g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
+			void *ft_handle = purple_xfers_get_handle();
+			purple_signal_connect(ft_handle, "file-recv-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-recv-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-recv-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-recv-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-send-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		}
+	
+		if (purple_prefs_get_bool(PREF_OVERLAY_ICON))
+		{
+			// Hijack the pidgin_blist_set_visible function
+			PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
+			pidgin_old_set_visible = ops->set_visible;
+			ops->set_visible = win7_blist_set_visible;
+			
+			PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+			// The buddy list MUST be shown before we put the taskbar icon on it
+			purple_blist_show();
+			purple_blist_set_visible(TRUE);
+
+			if (blist && blist->window)
+				store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
+			purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change), NULL);
+
+			pidgin_blist_visibility_manager_add();
+			
+			if (blist && blist->window)
+			{
+				// Hijack the signal when the window is closed from pidgin
+				guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
+				store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
+									signal_id, 0, NULL, NULL, NULL);
+				g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
+			}
+			
+			// Update the icon in the taskbar
+			pidgin_on_status_change(purple_savedstatus_get_current(), NULL);
 		}
 		
-		// Update the icon in the taskbar
-		pidgin_on_status_change(purple_savedstatus_get_current(), NULL);
-		
-		// Connect to the signals for creating, deleting, focusing conversations
-		purple_signal_connect(pidgin_conversations_get_handle(), "conversation-switched", plugin, PURPLE_CALLBACK(on_conv_switch), store->itl);
-		purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin, PURPLE_CALLBACK(on_conv_delete), store->itl);
-		purple_signal_connect(purple_conversations_get_handle(), "conversation-created", plugin, PURPLE_CALLBACK(on_conv_create), store->itl);
-		
-		win7_init_conv_windows(store->itl);
-		// TODO call DwmSetWindowAttribute() to notify that we support thumbnails
-		// TODO listen for the WM_DWMSENDICONICTHUMBNAIL winapi event and call DwmSetIconicThumbnail()
+		if (purple_prefs_get_bool(PREF_CONV_WIN))
+		{
+			win7_init_conv_windows(store->itl);
+			
+			// Connect to the signals for creating, deleting, focusing conversations
+			purple_signal_connect(pidgin_conversations_get_handle(), "conversation-switched", plugin, PURPLE_CALLBACK(on_conv_switch), store->itl);
+			purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", plugin, PURPLE_CALLBACK(on_conv_delete), store->itl);
+			purple_signal_connect(purple_conversations_get_handle(), "conversation-created", plugin, PURPLE_CALLBACK(on_conv_create), store->itl);
+			purple_signal_connect(purple_conversations_get_handle(), "conversation-updated", plugin, PURPLE_CALLBACK(win7_update_icon), NULL);
+		}
 		
 	} else {
 		return FALSE;
@@ -636,6 +654,11 @@ plugin_unload(PurplePlugin *plugin)
 		purple_signal_disconnect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update));
 		purple_signal_disconnect(ft_handle, "file-send-complete", plugin, PURPLE_CALLBACK(ft_update));
 		
+		purple_signal_disconnect(pidgin_conversations_get_handle(), "conversation-switched", plugin, PURPLE_CALLBACK(on_conv_switch));
+		purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation", plugin, PURPLE_CALLBACK(on_conv_delete));
+		purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created", plugin, PURPLE_CALLBACK(on_conv_create));
+		purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated", plugin, PURPLE_CALLBACK(win7_update_icon));
+		
 		win7_destroy_conv_windows(store->itl);
 	}
 	
@@ -649,6 +672,8 @@ plugin_unload(PurplePlugin *plugin)
 			g_signal_handler_disconnect(G_OBJECT(blist->window), store->blist_destroy_handler_id);
 		}
 	}
+	
+	
 
 	g_signal_handler_unblock(blist->window, store->pidgin_destroy_handler_id);
 	purple_signal_disconnect(purple_savedstatuses_get_handle(), "savedstatus-changed", plugin, PURPLE_CALLBACK(pidgin_on_status_change));
@@ -656,9 +681,10 @@ plugin_unload(PurplePlugin *plugin)
 	// Un-hijack the pidgin_blist_set_visible function
 	PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
 	if (ops->set_visible == win7_blist_set_visible)
+	{
 		ops->set_visible = pidgin_old_set_visible;
-	
-	pidgin_blist_visibility_manager_remove();
+		pidgin_blist_visibility_manager_remove();
+	}
 	
 	g_free(store);
 	
@@ -671,7 +697,50 @@ static void
 plugin_init(PurplePlugin *plugin)
 {
 	this_plugin = plugin;
+	
+	purple_prefs_add_none(PREF_PREFIX);
+	purple_prefs_add_bool(PREF_JUMPLIST, TRUE);
+	purple_prefs_add_bool(PREF_OVERLAY_ICON, TRUE);
+	purple_prefs_add_bool(PREF_CONV_WIN, FALSE);
+	purple_prefs_add_bool(PREF_TAB_THUMBS, FALSE);
+	purple_prefs_add_bool(PREF_FILE_PROGRESS, TRUE);
 }
+
+static PurplePluginPrefFrame *
+plugin_config_frame(PurplePlugin *plugin)
+{
+	PurplePluginPrefFrame *frame;
+	PurplePluginPref *pref;
+	
+	frame = purple_plugin_pref_frame_new();
+	
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_JUMPLIST, _("Show right-click jumplist menu"));
+	purple_plugin_pref_frame_add(frame, pref);
+
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_OVERLAY_ICON, _("Show status overlay icon"));
+	purple_plugin_pref_frame_add(frame, pref);
+
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_FILE_PROGRESS, _("Show file transfer progress"));
+	purple_plugin_pref_frame_add(frame, pref);
+
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_CONV_WIN, _("Seperate conversation tabs into seperate windows (Buggy)"));
+	purple_plugin_pref_frame_add(frame, pref);
+	
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_TAB_THUMBS, _("Show tab thumbnail previews/aero peek (Buggy)"));
+	purple_plugin_pref_frame_add(frame, pref);
+	
+	return frame;
+}
+
+static PurplePluginUiInfo prefs_info = {
+	plugin_config_frame,
+	0,
+	NULL,
+	NULL,
+	NULL,
+	NULL,
+	NULL
+};
 
 static PurplePluginInfo info = 
 {
@@ -686,7 +755,7 @@ static PurplePluginInfo info =
 
 	"eionrobb-pidgin-win7",
 	"Windows 7",
-	"0.1",
+	"0.4",
 	"Win7 Extensions for Pidgin",
 	"",
 	"Eion Robb <eionrobb@gmail.com>",
@@ -698,7 +767,7 @@ static PurplePluginInfo info =
 	
 	NULL,
 	NULL,
-	NULL,
+	&prefs_info,
 	NULL,
 	
 	NULL,
