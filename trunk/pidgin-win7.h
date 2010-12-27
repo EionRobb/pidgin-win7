@@ -16,6 +16,7 @@
 #	define PURPLE_PLUGINS
 #endif
 
+// Libpurple includes
 #include "core.h"
 #include "savedstatuses.h"
 #include "signals.h"
@@ -24,11 +25,16 @@
 #include "debug.h"
 #include "buddyicon.h"
 
+// Pidgin includes
 #include "gtkft.h"
 #include "gtkblist.h"
 #include "pidginstock.h"
 #include "gtkconv.h"
 #include "gtkconvwin.h"
+#include "gtkdialogs.h"
+#include "gtkplugin.h"
+#include "gtkaccount.h"
+#include "gtkprefs.h"
 
 #ifndef _
 #define _(a) (a)
@@ -842,6 +848,25 @@ uri_handler(const char *proto, const char *cmd, GHashTable *params)
 		purple_savedstatus_activate(saved_status);
 		
 		return TRUE;
+	} else if ((temp = (gchar *)g_hash_table_lookup(params, "window")))
+	{
+		purple_debug_info("win7", "open window %s\n", temp);
+		if (g_str_equal(temp, "im"))
+		{
+			pidgin_dialogs_im();
+		} else if (g_str_equal(temp, "chat"))
+		{
+			pidgin_blist_joinchat_show();
+		} else if (g_str_equal(temp, "plugins"))
+		{
+			pidgin_plugin_dialog_show();
+		} else if (g_str_equal(temp, "accounts"))
+		{
+			pidgin_accounts_window_show();
+		} else if (g_str_equal(temp, "prefs"))
+		{
+			pidgin_prefs_show();
+		}
 	}
 	
 	//we don't know how to handle this
