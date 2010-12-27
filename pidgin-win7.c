@@ -52,7 +52,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	PidginConversation *pconv;
 	HBITMAP hbitmap, mask;
 	GdkPixbuf *pixbuf = NULL;
-	GdkColormap *cmap = NULL;
 	
 	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
 	if (!conv)
@@ -182,12 +181,12 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 		icon = pidgin_conv_get_tab_icon(conv, FALSE);
 		if (icon)
 		{
-			SendMessage(hTab, WM_SETICON, ICON_SMALL, pixbuf_to_hicon(icon));
+			SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)pixbuf_to_hicon(icon));
 			g_object_unref(icon);
 		}
 		
 		// Set the title for the 'window'
-		SendMessage(hTab, WM_SETTEXT, 0, purple_conversation_get_title(conv));
+		SendMessage(hTab, WM_SETTEXT, 0, (LPARAM)purple_conversation_get_title(conv));
 	}
 }
 
@@ -197,7 +196,6 @@ win7_create_hiddenwin(PurpleConversation *conv)
 {
 	HWND hTab;
 	DWORD lasterror;
-	GdkPixbuf *icon;
 	BOOL fForceIconic = TRUE;
 	BOOL fHasIconicBitmap = TRUE;
 	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
@@ -914,23 +912,23 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		//TODO add tasks for sending a new message
 		
 		shellLink = pidgin_win7_create_shell_link(_("Available"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=available", NULL);
-		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Away"), iconpath, 1, pidgin_path, "--protocolhandler=win7:update?status=away", NULL);
-		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Do not disturb"), iconpath, 2, pidgin_path, "--protocolhandler=win7:update?status=unavailable", NULL);
-		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Invisible"), iconpath, 3, pidgin_path, "--protocolhandler=win7:update?status=invisible", NULL);
-		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
 		shellLink = pidgin_win7_create_shell_link(_("Offline"), iconpath, 4, pidgin_path, "--protocolhandler=win7:update?status=offline", NULL);
-		shellLinks->lpVtbl->AddObject(shellLinks, shellLink);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
 		//GList *list = purple_savedstatuses_get_popular(6);
