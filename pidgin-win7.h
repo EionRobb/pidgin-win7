@@ -279,6 +279,7 @@ typedef struct {
 
 
 DEFINE_PROPERTYKEY(PKEY_Title, 0xF29F85E0, 0x4FF9, 0x1068, 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9, 2);
+DEFINE_PROPERTYKEY(PKEY_AppUserModel_IsDestListSeparator, 0x9F4C2855, 0x9F79, 0x4B39, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3, 6);
 
 #ifndef __IPropertyStore_INTERFACE_DEFINED__
 #define __IPropertyStore_INTERFACE_DEFINED__
@@ -581,6 +582,7 @@ plugin_load(PurplePlugin *plugin)
 			purple_signal_connect(ft_handle, "file-recv-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 			purple_signal_connect(ft_handle, "file-recv-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 			purple_signal_connect(ft_handle, "file-recv-complete", plugin, PURPLE_CALLBACK(ft_update), store->itl);
+			purple_signal_connect(ft_handle, "file-recv-request", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 			purple_signal_connect(ft_handle, "file-send-accept", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 			purple_signal_connect(ft_handle, "file-send-start", plugin, PURPLE_CALLBACK(ft_update), store->itl);
 			purple_signal_connect(ft_handle, "file-send-cancel", plugin, PURPLE_CALLBACK(ft_update), store->itl);
@@ -763,7 +765,7 @@ static PurplePluginInfo info =
 	"Windows 7",
 	"0.4",
 	"Win7 Extensions for Pidgin",
-	"",
+	"Windows 7 Extensions for Pidgin.  Lets you use new eye-candy such as jumplists, thumbnail previews and file transfer progress indicators.",
 	"Eion Robb <eionrobb@gmail.com>",
 	"http://pidgin-win7.googlecode.com/", //URL
 	
@@ -867,6 +869,9 @@ uri_handler(const char *proto, const char *cmd, GHashTable *params)
 		{
 			pidgin_prefs_show();
 		}
+	} else if (g_str_equal(cmd, "quit"))
+	{
+		purple_core_quit();
 	}
 	
 	//we don't know how to handle this

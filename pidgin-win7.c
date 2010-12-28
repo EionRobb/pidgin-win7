@@ -813,6 +813,7 @@ ft_update(PurpleXfer *xfer, gpointer data)
 			break;
 		case PURPLE_XFER_STATUS_STARTED:
 			purple_timeout_add_seconds(1, ft_update_transferred, xfer);
+			//Fallthough intentional
 		case PURPLE_XFER_STATUS_ACCEPTED:
 			itl->lpVtbl->SetProgressState(itl, ft_window, TBPF_NORMAL);
 			break;
@@ -852,18 +853,43 @@ void pidgin_win7_delete_jumplist(ICustomDestinationList *pcdl)
 	pcdl->lpVtbl->Release(pcdl);
 }
 
-IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
-	gint icon_index, const char *path, const char *args, const char *description)
+IShellLink *pidgin_win7_create_separator()
 {
-	purple_debug_info("win7", "create_shell_link\n");
-	IShellLink *psl;
+	purple_debug_info("win7", "create_separator\n");
+	IShellLink *psl = NULL;
 	
 	HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (void**)&psl);
 	if (SUCCEEDED(hr))
 	{
-		if (icon != NULL)
+		IPropertyStore *pps;
+		PROPVARIANT propvar;
+
+		psl->lpVtbl->QueryInterface(psl, &IID_IPropertyStore, (void **)&pps);
+		PropVariantInit(&propvar);
+		propvar.vt = VT_BOOL;
+		propvar.boolVal = -1; // -1 TRUE, 0 FALSE
+		pps->lpVtbl->SetValue(pps, &PKEY_AppUserModel_IsDestListSeparator, &propvar);
+		pps->lpVtbl->Commit(pps);
+		pps->lpVtbl->Release(pps);
+	}
+	
+	return psl;
+}
+
+IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
+	gint icon_index, const char *path, const char *args, const char *description)
+{
+	purple_debug_info("win7", "create_shell_link\n");
+	IShellLink *psl = NULL;
+	
+	HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (void**)&psl);
+	if (SUCCEEDED(hr))
+	{
+		if (icon != NULL && icon_index >= 0)
 		{
-			psl->lpVtbl->SetIconLocation(psl, g_strdup(icon), icon_index);
+			purple_debug_info("win7", "setting icon to %s,%d\n", icon, icon_index);
+			hr = psl->lpVtbl->SetIconLocation(psl, icon, icon_index);
+			purple_debug_info("win7", "result: %d\n", hr);
 		}
 		if (path != NULL)
 		{
@@ -877,21 +903,27 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 		{
 			psl->lpVtbl->SetDescription(psl, description);
 		}
-//#ifdef __IPropertyStore_INTERFACE_DEFINED__
-		//Add title and description
-		IPropertyStore *pps;
-		PROPVARIANT propvar;
+		if (title != NULL)
+		{
+			//Add title
+			IPropertyStore *pps;
+			PROPVARIANT propvar;
 
-		psl->lpVtbl->QueryInterface(psl, &IID_IPropertyStore, (void **)&pps);
-		PropVariantInit(&propvar);
-		propvar.vt = VT_LPSTR;
-		propvar.pszVal = g_strdup(title);
-		pps->lpVtbl->SetValue(pps, &PKEY_Title, &propvar);
-		g_free(propvar.pszVal);
-		pps->lpVtbl->Commit(pps);
-		pps->lpVtbl->Release(pps);
-//#endif
+			psl->lpVtbl->QueryInterface(psl, &IID_IPropertyStore, (void **)&pps);
+			PropVariantInit(&propvar);
+			propvar.vt = VT_LPSTR;
+			propvar.pszVal = g_strdup(title);
+			
+			// Remove all the _ characters (from the translations)
+			purple_str_strip_char(propvar.pszVal, '_');
+			
+			pps->lpVtbl->SetValue(pps, &PKEY_Title, &propvar);
+			g_free(propvar.pszVal);
+			pps->lpVtbl->Commit(pps);
+			pps->lpVtbl->Release(pps);
+		}
 	}
+	
 	return psl;
 }
 
@@ -909,8 +941,22 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		purple_debug_info("win7", "pidgin_path %s\n", pidgin_path);
 		const gchar *iconpath = this_plugin->path;
 		
-		//TODO add tasks for sending a new message
+		//Add tasks for sending a new message
+		shellLink = pidgin_win7_create_shell_link(_("New _Message..."), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=im", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
 		
+		shellLink = pidgin_win7_create_shell_link(_("Join Chat..."), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=chat", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+		
+/*****************************************************************************/		
+		shellLink = pidgin_win7_create_separator();
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+/*****************************************************************************/
+		
+		//Add tasks for setting status
 		shellLink = pidgin_win7_create_shell_link(_("Available"), iconpath, 0, pidgin_path, "--protocolhandler=win7:update?status=available", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
@@ -934,7 +980,27 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		//GList *list = purple_savedstatuses_get_popular(6);
 		//title = purple_savedstatus_get_title
 		
-		//TODO Add in the quit task with a seperator
+/*****************************************************************************/		
+		shellLink = pidgin_win7_create_separator();
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+/*****************************************************************************/
+		
+		shellLink = pidgin_win7_create_shell_link(_("_Accounts"), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=accounts", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+		
+		shellLink = pidgin_win7_create_shell_link(_("Plu_gins"), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=plugins", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+		
+		shellLink = pidgin_win7_create_shell_link(_("Pr_eferences"), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=prefs", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
+		
+		shellLink = pidgin_win7_create_shell_link(_("_Quit"), NULL, 0, pidgin_path, "--protocolhandler=win7:quit", NULL);
+		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
+		shellLink->lpVtbl->Release(shellLink);
 
 		IObjectArray *jumplist_items_array;
 		hr = shellLinks->lpVtbl->QueryInterface(shellLinks, &IID_IObjectArray, (void **)&jumplist_items_array);
