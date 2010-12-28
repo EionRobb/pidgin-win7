@@ -1,0 +1,16 @@
+#summary A list of changes between versions
+#labels Featured,Phase-Design
+
+= Changelog =
+
+== Version 4 ==
+  * Plugin configuration through preferences screen
+  * Separate chat/IM 'window's per tab
+  * Pretty status icons in jumplist
+  * More actions, such as to make a new IM/chat or to open config screens
+  * Added buggy buddy icon images as window thumbnails (aero peek)
+
+== Version 3 ==
+  * Basic status updates via jumplist
+  * Progress bars for file transfers
+  * Status icon showing as taskbar emblem
