@@ -3,6 +3,246 @@
 */
 #include "pidgin-win7.h"
 
+static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
+static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
+static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
+
+// Conversation -> HWND  map
+static GHashTable *win7_conv_hwnd = NULL;
+// HWND -> Conversation  map
+static GHashTable *win7_hwnd_conv = NULL;
+
+void
+win7_jumplist_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
+{
+	if (val)
+		win7_enable_jumplist(data);
+	else
+		win7_disable_jumplist(data);
+}
+
+void
+win7_overlay_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
+{
+	if (val)
+		win7_enable_overlay(data);
+	else
+		win7_disable_overlay(data);
+}
+
+void
+win7_convwin_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
+{
+	if (val)
+		win7_enable_convwin(data);
+	else
+		win7_disable_convwin(data);
+}
+
+void
+win7_tabthumb_each_cb(gpointer key, gpointer value, gpointer user_data)
+{
+	BOOL fForceIconic;
+	BOOL fHasIconicBitmap;
+	HWND hTab = value;
+	
+	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
+	{
+		fForceIconic = fHasIconicBitmap = TRUE;
+	} else {
+		fForceIconic = fHasIconicBitmap = FALSE;
+	}
+	
+	DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+		&fForceIconic, sizeof(fForceIconic));
+	
+	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+		sizeof(fHasIconicBitmap));
+}
+
+void
+win7_tabthumb_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
+{
+	g_hash_table_foreach(win7_conv_hwnd, win7_tabthumb_each_cb, data);
+}
+
+void
+win7_progress_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
+{
+	if (val)
+		win7_enable_progress(data);
+	else
+		win7_disable_progress(data);
+}
+
+gboolean
+win7_enable_jumplist(PidginWin7Store *store)
+{
+	if (store->pcdl || 
+		SUCCEEDED(CoCreateInstance(&CLSID_DestinationList, NULL, CLSCTX_INPROC_SERVER, &IID_ICustomDestinationList, (void**)&store->pcdl)))
+	{
+		pidgin_win7_create_jumplist(store->pcdl);
+		
+		purple_signal_connect(purple_get_core(), "uri-handler", this_plugin, PURPLE_CALLBACK(uri_handler), NULL);
+		
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+void
+win7_disable_jumplist(PidginWin7Store *store)
+{
+	if (store && store->pcdl)
+	{
+		pidgin_win7_delete_jumplist(store->pcdl);
+		
+		store->pcdl = NULL;
+	}
+	
+	purple_signal_disconnect(purple_get_core(), "uri-handler", this_plugin, PURPLE_CALLBACK(uri_handler));
+}
+
+gboolean
+win7_enable_progress(PidginWin7Store *store)
+{
+	if (store->itl || 
+		SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (void**)&store->itl)))
+	{
+		void *ft_handle = purple_xfers_get_handle();
+		
+		purple_signal_connect(ft_handle, "file-recv-accept", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-start", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-cancel", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-complete", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-recv-request", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		
+		purple_signal_connect(ft_handle, "file-send-accept", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-start", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-cancel", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		purple_signal_connect(ft_handle, "file-send-complete", this_plugin, PURPLE_CALLBACK(ft_update), store->itl);
+		
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+void
+win7_disable_progress(PidginWin7Store *store)
+{
+	void *ft_handle = purple_xfers_get_handle();
+	
+	purple_signal_disconnect(ft_handle, "file-recv-accept", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-recv-start", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-recv-cancel", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-recv-complete", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-send-accept", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-send-start", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-send-cancel", this_plugin, PURPLE_CALLBACK(ft_update));
+	purple_signal_disconnect(ft_handle, "file-send-complete", this_plugin, PURPLE_CALLBACK(ft_update));
+}
+
+gboolean
+win7_enable_overlay(PidginWin7Store *store)
+{
+	if (store->itl || 
+		SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (void**)&store->itl)))
+	{
+		// Hijack the pidgin_blist_set_visible function
+		PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
+		pidgin_old_set_visible = ops->set_visible;
+		ops->set_visible = win7_blist_set_visible;
+		
+		PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+		// The buddy list MUST be shown before we put the taskbar icon on it
+		purple_blist_show();
+		purple_blist_set_visible(TRUE);
+
+		if (blist && blist->window)
+			store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
+		purple_signal_connect(purple_savedstatuses_get_handle(), "savedstatus-changed", this_plugin, PURPLE_CALLBACK(win7_on_status_change), store);
+
+		pidgin_blist_visibility_manager_add();
+		
+		if (blist && blist->window)
+		{
+			// Hijack the signal when the window is closed from pidgin
+			guint signal_id = g_signal_lookup("delete_event", GTK_TYPE_WINDOW);
+			store->pidgin_destroy_handler_id = g_signal_handler_find(blist->window, G_SIGNAL_MATCH_ID,
+								signal_id, 0, NULL, NULL, NULL);
+			g_signal_handler_block(blist->window, store->pidgin_destroy_handler_id);
+		}
+		
+		// Update the icon in the taskbar
+		win7_on_status_change(purple_savedstatus_get_current(), NULL, store);
+		
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+void
+win7_disable_overlay(PidginWin7Store *store)
+{
+	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
+	if (blist && blist->window)
+	{
+		//Unset the taskbar icon
+		win7_on_status_change(NULL, NULL, store);
+		if (g_signal_handler_is_connected(G_OBJECT(blist->window), store->blist_destroy_handler_id))
+		{
+			g_signal_handler_disconnect(G_OBJECT(blist->window), store->blist_destroy_handler_id);
+		}
+	}
+	
+	g_signal_handler_unblock(blist->window, store->pidgin_destroy_handler_id);
+	purple_signal_disconnect(purple_savedstatuses_get_handle(), "savedstatus-changed", this_plugin, PURPLE_CALLBACK(win7_on_status_change));
+	
+	// Un-hijack the pidgin_blist_set_visible function
+	PurpleBlistUiOps *ops = purple_blist_get_ui_ops();
+	if (ops->set_visible == win7_blist_set_visible)
+	{
+		ops->set_visible = pidgin_old_set_visible;
+		pidgin_blist_visibility_manager_remove();
+	}
+}
+
+gboolean
+win7_enable_convwin(PidginWin7Store *store)
+{
+	if (store->itl || 
+		SUCCEEDED(CoCreateInstance(&CLSID_TaskbarList, NULL, CLSCTX_ALL, &IID_ITaskbarList3, (void**)&store->itl)))
+	{
+		win7_init_conv_windows(store->itl);
+		
+		// Connect to the signals for creating, deleting, focusing conversations
+		purple_signal_connect(pidgin_conversations_get_handle(), "conversation-switched", this_plugin, PURPLE_CALLBACK(on_conv_switch), store->itl);
+		purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", this_plugin, PURPLE_CALLBACK(on_conv_delete), store->itl);
+		purple_signal_connect(purple_conversations_get_handle(), "conversation-created", this_plugin, PURPLE_CALLBACK(on_conv_create), store->itl);
+		purple_signal_connect(purple_conversations_get_handle(), "conversation-updated", this_plugin, PURPLE_CALLBACK(win7_update_icon), NULL);
+		
+		return TRUE;
+	} else {
+		return FALSE;
+	}
+}
+
+void
+win7_disable_convwin(PidginWin7Store *store)
+{
+	purple_signal_disconnect(pidgin_conversations_get_handle(), "conversation-switched", this_plugin, PURPLE_CALLBACK(on_conv_switch));
+	purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation", this_plugin, PURPLE_CALLBACK(on_conv_delete));
+	purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created", this_plugin, PURPLE_CALLBACK(on_conv_create));
+	purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated", this_plugin, PURPLE_CALLBACK(win7_update_icon));
+	
+	if (store && store->itl)
+	{
+		win7_destroy_conv_windows(store->itl);
+	}
+}
 
 static void
 win7_blist_set_visible(PurpleBuddyList *list, gboolean show)
@@ -20,15 +260,6 @@ win7_blist_set_visible(PurpleBuddyList *list, gboolean show)
 		gtk_window_iconify(GTK_WINDOW(gtkblist->window));
 	}
 }
-
-static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
-static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
-static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
-
-// Conversation -> HWND  map
-static GHashTable *win7_conv_hwnd = NULL;
-// HWND -> Conversation  map
-static GHashTable *win7_hwnd_conv = NULL;
 
 /* From pidginsnarl */
 static void
@@ -72,13 +303,17 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			// Handle the thumbnail close button
 			purple_debug_info("win7", "wm_close\n");
 			purple_conversation_destroy(conv);
+			return 0;
 		}	break;
 		case WM_ACTIVATE:
 		{
 			// Handle the thumbnail being clicked on
-			purple_debug_info("win7", "wm_activate\n");
-			showConversation(conv);
-			return TRUE;
+			if (LOWORD(wparam))
+			{
+				purple_debug_info("win7", "wm_activate %d, %d, %d\n", hwnd, LOWORD(wparam), HIWORD(wparam));
+				showConversation(conv);
+				return 0;
+			}
 		}	break;
 		case WM_COMMAND:
 		{
@@ -682,14 +917,12 @@ static HICON load_hicon_from_stock(const char *stock) {
 }
 
 static void
-pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old)
+win7_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old, gpointer data)
 {
-	purple_debug_info("win7", "pidgin_on_status_change\n");
+	PidginWin7Store *store = (PidginWin7Store *)data;
+	purple_debug_info("win7", "win7_on_status_change\n");
 	
-	if(!this_plugin || !this_plugin->extra)
-		return;
-	
-	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
+	ITaskbarList3 *itl = store->itl;
 	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
 	HWND blist_window = GDK_WINDOW_HWND(gtk_widget_get_window(blist->window));
 	
@@ -700,6 +933,7 @@ pidgin_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old)
 	{
 		//Unset the tray icon
 		itl->lpVtbl->SetOverlayIcon(itl, blist_window, NULL, NULL);
+		return;
 	}
 	
 	PurpleStatusPrimitive status = 	purple_savedstatus_get_type(new);
@@ -887,9 +1121,7 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 	{
 		if (icon != NULL && icon_index >= 0)
 		{
-			purple_debug_info("win7", "setting icon to %s,%d\n", icon, icon_index);
-			hr = psl->lpVtbl->SetIconLocation(psl, icon, icon_index);
-			purple_debug_info("win7", "result: %d\n", hr);
+			psl->lpVtbl->SetIconLocation(psl, icon, icon_index);
 		}
 		if (path != NULL)
 		{
