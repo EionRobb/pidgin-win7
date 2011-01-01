@@ -12,6 +12,22 @@ static GHashTable *win7_conv_hwnd = NULL;
 // HWND -> Conversation  map
 static GHashTable *win7_hwnd_conv = NULL;
 
+HWND
+win7_get_hwnd_from_conv(PurpleConversation *conv)
+{
+	PidginConversation *gtkconv = PIDGIN_CONVERSATION(conv);
+	
+	return g_hash_table_lookup(win7_conv_hwnd, conv);
+}
+
+PurpleConversation *
+win7_get_conv_from_hwnd(HWND hwnd)
+{
+	PidginConversation *gtkconv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
+	
+	return gtkconv->active_conv;
+}
+
 void
 win7_jumplist_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
 {
@@ -390,6 +406,8 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				DwmSetIconicThumbnail(hwnd, hbitmap, 1);
 				DeleteObject(mask);
 				DeleteObject(hbitmap);
+				
+				return 0;
 			}
 			
 		}	break;
@@ -408,20 +426,55 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 {
 	HWND hTab;
 	GdkPixbuf *icon;
+	FLASHWINFO info;
+	DWORD flashCount;
 	
 	hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
 	if (hTab)
 	{
-		// Set the icon for the 'window'
-		icon = pidgin_conv_get_tab_icon(conv, FALSE);
-		if (icon)
+		switch(type)
 		{
-			SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)pixbuf_to_hicon(icon));
-			g_object_unref(icon);
+			case PURPLE_CONV_UPDATE_ADD:
+			case PURPLE_CONV_UPDATE_REMOVE:
+			case PURPLE_CONV_UPDATE_ACCOUNT:
+			case PURPLE_CONV_UPDATE_TOPIC:
+			case PURPLE_CONV_ACCOUNT_ONLINE:
+			case PURPLE_CONV_ACCOUNT_OFFLINE:
+			case PURPLE_CONV_UPDATE_AWAY:
+			case PURPLE_CONV_UPDATE_ICON:
+			{
+				// Set the icon for the 'window'
+				icon = pidgin_conv_get_tab_icon(conv, FALSE);
+				if (icon)
+				{
+					SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)pixbuf_to_hicon(icon));
+					g_object_unref(icon);
+				}
+				
+				// Set the title for the 'window'
+				SendMessage(hTab, WM_SETTEXT, 0, (LPARAM)purple_conversation_get_title(conv));
+			}	break;
+			case PURPLE_CONV_UPDATE_UNSEEN:
+			{
+				// Flash the conversation 'window'
+				memset(&info, 0, sizeof(FLASHWINFO));
+				info.cbSize = sizeof(FLASHWINFO);
+				info.hwnd = hTab;
+				if (purple_conversation_get_data(conv, "unseen-count"))
+				{
+					info.uCount = 3;
+					if (SystemParametersInfo(SPI_GETFOREGROUNDFLASHCOUNT, 0, &flashCount, 0))
+						info.uCount = flashCount;
+					info.dwFlags = FLASHW_ALL | FLASHW_TIMER;
+				} else {
+					info.dwFlags = FLASHW_STOP;
+				}
+				FlashWindowEx(&info);
+				info.dwTimeout = 0;
+			}	break;
+			default:
+				break;
 		}
-		
-		// Set the title for the 'window'
-		SendMessage(hTab, WM_SETTEXT, 0, (LPARAM)purple_conversation_get_title(conv));
 	}
 }
 
