@@ -6,6 +6,7 @@
 static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
 static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
 static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
+static HBITMAP create_alpha_bitmap (gint width, gint height, guchar **outdata);
 
 // Conversation -> HWND  map
 static GHashTable *win7_conv_hwnd = NULL;
@@ -341,13 +342,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		{
 			// Thumbnail needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconicthumbnail\n");
-			/*cmap = gtk_widget_get_colormap(pconv->win->window);
-			pixbuf = gdk_pixbuf_get_from_drawable(NULL, pconv->win->window, cmap, 0, 0, 0, 0, 200, 200);
-			
-			pixbuf_to_hbitmaps_normal(pixbuf, &hbitmap, &mask);
-			DeleteObject (mask);
-			
-			DwmSetIconicThumbnail(hwnd, hbitmap, 0);*/
 			gconstpointer data = NULL;
 			PurpleStoredImage *custom_img = NULL;
 			size_t len;
@@ -392,12 +386,23 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			{
 				gint original_width = gdk_pixbuf_get_width (pixbuf);
 				gint original_height = gdk_pixbuf_get_height (pixbuf);
+				gint ratio = original_width / original_height;
 				gint maxwidth = HIWORD(lparam);
 				gint maxheight = LOWORD(lparam);
-				gint size = MIN( maxwidth, maxheight );
+				gint newwidth, newheight;
+				//gint size = MIN( maxwidth, maxheight );
 				purple_debug_info("win7", "max size %d x %d\n", maxwidth, maxheight);
-				purple_debug_info("win7", "scale to %d x %d\n", size, size);
-				pixbuf = gdk_pixbuf_scale_simple(pixbuf, size, size, GDK_INTERP_BILINEAR);
+				
+				newheight = maxheight;
+				newwidth = maxheight * ratio;
+				if (newwidth > maxwidth)
+				{
+					newwidth = maxwidth;
+					newheight = maxheight * (1/ratio);
+				}
+				
+				purple_debug_info("win7", "scale to %d x %d\n", newwidth, newheight);
+				pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
 				purple_debug_info("win7", "scaled %d\n", pixbuf);
 				
 				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
@@ -415,7 +420,31 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		{
 			// Preview needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconiclivepreviewbitmap\n");
-			//DwmSetIconicLivePreviewBitmap();
+			
+			// Switch to the right conversation, then take a screenshot
+			pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
+			gint width, height;
+			
+			gtk_window_get_size(GTK_WINDOW(pconv->win->window), &width, &height);
+			
+			// Make a 32bit transparent pixbuf
+			pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+			pixbuf = gdk_pixbuf_get_from_drawable(pixbuf, GDK_DRAWABLE(pconv->win->window->window), NULL, 0, 0, 0, 0, width, height);
+			
+			purple_debug_info("win7", "pixbuf: %d, width: %d, height: %d\n", pixbuf, width, height);
+			
+			POINT offset = { 0, 0 };			
+			pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
+			purple_debug_info("win7", "hbitmap: %d\n", hbitmap);
+			
+			//DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, DWM_SIT_DISPLAYFRAME);
+			DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, 0);
+			
+			DeleteObject(mask);
+			DeleteObject(hbitmap);
+			g_object_unref(pixbuf);
+			
+			return 0;
 		}	break;
 	}
 	return DefWindowProc(hwnd, msg, wparam, lparam);
@@ -453,6 +482,9 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 				
 				// Set the title for the 'window'
 				SendMessage(hTab, WM_SETTEXT, 0, (LPARAM)purple_conversation_get_title(conv));
+				
+				// Invalidate the thumbnail preview
+				DwmInvalidateIconicBitmaps(hTab);
 			}	break;
 			case PURPLE_CONV_UPDATE_UNSEEN:
 			{
@@ -665,16 +697,19 @@ static HICON cached_icons[PURPLE_STATUS_NUM_PRIMITIVES + 2];
 static GtkWidget *image = NULL;
 
 static HBITMAP
-create_alpha_bitmap (gint     size,
+create_alpha_bitmap (gint width, gint height,
 		     guchar **outdata)
 {
   BITMAPV5HEADER bi;
   HDC hdc;
   HBITMAP hBitmap;
+  
+  purple_debug_info("win7", "create_alpha_bitmap\n");
 
   ZeroMemory (&bi, sizeof (BITMAPV5HEADER));
   bi.bV5Size = sizeof (BITMAPV5HEADER);
-  bi.bV5Height = bi.bV5Width = size;
+  bi.bV5Height = height;
+  bi.bV5Width = width;
   bi.bV5Planes = 1;
   bi.bV5BitCount = 32;
   bi.bV5Compression = BI_BITFIELDS;
@@ -703,7 +738,7 @@ create_alpha_bitmap (gint     size,
 }
 
 static HBITMAP
-create_color_bitmap (gint     size,
+create_color_bitmap (gint width, gint height,
 		     guchar **outdata,
 		     gint     bits)
 {
@@ -713,10 +748,13 @@ create_color_bitmap (gint     size,
   } bmi;
   HDC hdc;
   HBITMAP hBitmap;
+  
+  purple_debug_info("win7", "create_color_bitmap\n");
 
   ZeroMemory (&bmi, sizeof (bmi));
   bmi.bmiHeader.bV4Size = sizeof (BITMAPV4HEADER);
-  bmi.bmiHeader.bV4Height = bmi.bmiHeader.bV4Width = size;
+  bmi.bmiHeader.bV4Height = height;
+  bmi.bmiHeader.bV4Width = width;
   bmi.bmiHeader.bV4Planes = 1;
   bmi.bmiHeader.bV4BitCount = bits;
   bmi.bmiHeader.bV4V4Compression = BI_RGB;
@@ -754,7 +792,7 @@ pixbuf_to_hbitmaps_alpha_winxp (GdkPixbuf *pixbuf,
   HBITMAP hColorBitmap, hMaskBitmap;
   guchar *indata, *inrow;
   guchar *colordata, *colorrow, *maskdata, *maskbyte;
-  gint width, height, size, i, i_offset, j, j_offset, rowstride;
+  gint width, height, i, i_offset, j, j_offset, rowstride;
   guint maskstride, mask_bit;
   
   purple_debug_misc("win7", "pixbuf_to_hbitmaps_alpha_winxp\n");
@@ -762,13 +800,10 @@ pixbuf_to_hbitmaps_alpha_winxp (GdkPixbuf *pixbuf,
   width = gdk_pixbuf_get_width (pixbuf); /* width of icon */
   height = gdk_pixbuf_get_height (pixbuf); /* height of icon */
 
-  /* The bitmaps are created square */
-  size = MAX (width, height);
-
-  hColorBitmap = create_alpha_bitmap (size, &colordata);
+  hColorBitmap = create_alpha_bitmap (width, height, &colordata);
   if (!hColorBitmap)
     return FALSE;
-  hMaskBitmap = create_color_bitmap (size, &maskdata, 1);
+  hMaskBitmap = create_color_bitmap (width, height, &maskdata, 1);
   if (!hMaskBitmap)
     {
       DeleteObject (hColorBitmap);
@@ -776,12 +811,12 @@ pixbuf_to_hbitmaps_alpha_winxp (GdkPixbuf *pixbuf,
     }
 
   /* MSDN says mask rows are aligned to "LONG" boundaries */
-  maskstride = (((size + 31) & ~31) >> 3);
+  maskstride = (((width + 31) & ~31) >> 3);
 
   indata = gdk_pixbuf_get_pixels (pixbuf);
   rowstride = gdk_pixbuf_get_rowstride (pixbuf);
 
-  if (width > height)
+  /*if (width > height)
     {
       i_offset = 0;
       j_offset = (width - height) / 2;
@@ -790,11 +825,13 @@ pixbuf_to_hbitmaps_alpha_winxp (GdkPixbuf *pixbuf,
     {
       i_offset = (height - width) / 2;
       j_offset = 0;
-    }
+    }*/
+	i_offset = 0;
+	j_offset = 0;
 
   for (j = 0; j < height; j++)
     {
-      colorrow = colordata + 4*(j+j_offset)*size + 4*i_offset;
+      colorrow = colordata + 4*(j+j_offset)*width + 4*i_offset;
       maskbyte = maskdata + (j+j_offset)*maskstride + i_offset/8;
       mask_bit = (0x80 >> (i_offset % 8));
       inrow = indata + (height-j-1)*rowstride;
@@ -834,7 +871,7 @@ pixbuf_to_hbitmaps_normal (GdkPixbuf *pixbuf,
   HBITMAP hColorBitmap, hMaskBitmap;
   guchar *indata, *inrow;
   guchar *colordata, *colorrow, *maskdata, *maskbyte;
-  gint width, height, size, i, i_offset, j, j_offset, rowstride, nc, bmstride;
+  gint width, height, i, i_offset, j, j_offset, rowstride, nc, bmstride;
   gboolean has_alpha;
   guint maskstride, mask_bit;
   
@@ -843,13 +880,10 @@ pixbuf_to_hbitmaps_normal (GdkPixbuf *pixbuf,
   width = gdk_pixbuf_get_width (pixbuf); /* width of icon */
   height = gdk_pixbuf_get_height (pixbuf); /* height of icon */
 
-  /* The bitmaps are created square */
-  size = MAX (width, height);
-
-  hColorBitmap = create_color_bitmap (size, &colordata, 24);
+  hColorBitmap = create_color_bitmap (width, height, &colordata, 24);
   if (!hColorBitmap)
     return FALSE;
-  hMaskBitmap = create_color_bitmap (size, &maskdata, 1);
+  hMaskBitmap = create_color_bitmap (width, height, &maskdata, 1);
   if (!hMaskBitmap)
     {
       DeleteObject (hColorBitmap);
@@ -857,19 +891,19 @@ pixbuf_to_hbitmaps_normal (GdkPixbuf *pixbuf,
     }
 
   /* rows are always aligned on 4-byte boundarys */
-  bmstride = size * 3;
+  bmstride = width * 3;
   if (bmstride % 4 != 0)
     bmstride += 4 - (bmstride % 4);
 
   /* MSDN says mask rows are aligned to "LONG" boundaries */
-  maskstride = (((size + 31) & ~31) >> 3);
+  maskstride = (((width + 31) & ~31) >> 3);
 
   indata = gdk_pixbuf_get_pixels (pixbuf);
   rowstride = gdk_pixbuf_get_rowstride (pixbuf);
   nc = gdk_pixbuf_get_n_channels (pixbuf);
   has_alpha = gdk_pixbuf_get_has_alpha (pixbuf);
 
-  if (width > height)
+  /*if (width > height)
     {
       i_offset = 0;
       j_offset = (width - height) / 2;
@@ -878,7 +912,9 @@ pixbuf_to_hbitmaps_normal (GdkPixbuf *pixbuf,
     {
       i_offset = (height - width) / 2;
       j_offset = 0;
-    }
+    }*/
+	i_offset = 0;
+	j_offset = 0;
 
   for (j = 0; j < height; j++)
     {

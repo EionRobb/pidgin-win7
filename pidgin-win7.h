@@ -514,6 +514,11 @@ enum {
 
 extern HRESULT DwmSetWindowAttribute(HWND hwnd, DWORD attr, LPCVOID attrValue, DWORD attrSize);
 extern HRESULT DwmSetIconicThumbnail(HWND hwnd, HBITMAP hbmp, DWORD dwSITFlags);
+extern HRESULT DwmSetIconicLivePreviewBitmap(HWND hwnd, HBITMAP hbmp, POINT *pptClient, DWORD dwSITFlags);
+extern HRESULT DwmInvalidateIconicBitmaps(HWND hwnd);
+#ifndef DWM_SIT_DISPLAYFRAME
+#	define DWM_SIT_DISPLAYFRAME 0x1
+#endif
 
 G_MODULE_EXPORT LRESULT CALLBACK win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam);
 
