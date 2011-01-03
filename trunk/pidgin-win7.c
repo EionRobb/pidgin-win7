@@ -288,19 +288,14 @@ live_conv_cb(gpointer user_data)
 	GdkPixbuf *pixbuf = NULL;
 	HWND hwnd = g_hash_table_lookup(win7_conv_hwnd, conv);
 	
-	purple_debug_info("win7", "live_conv_cb\n");
-	
 	gtk_window_get_size(GTK_WINDOW(pconv->win->window), &width, &height);
 	
 	// Make a 32bit transparent pixbuf
 	pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
 	pixbuf = gdk_pixbuf_get_from_drawable(pixbuf, GDK_DRAWABLE(pconv->win->window->window), NULL, 0, 0, 0, 0, width, height);
 	
-	purple_debug_info("win7", "pixbuf: %d, width: %d, height: %d\n", pixbuf, width, height);
-	
 	POINT offset = { 0, 0 };
 	pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-	purple_debug_info("win7", "hbitmap: %d\n", hbitmap);
 	
 	//DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, DWM_SIT_DISPLAYFRAME);
 	DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, 0);
@@ -348,12 +343,10 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			
 			// Create taskbar buttons?
 			//TODO We dont have thumbnail buttons yet
-			purple_debug_info("win7", "wm_create\n");
 		}	break;
 		case WM_CLOSE:
 		{
 			// Handle the thumbnail close button
-			purple_debug_info("win7", "wm_close\n");
 			purple_conversation_destroy(conv);
 			return 0;
 		}	break;
@@ -362,7 +355,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			// Handle the thumbnail being clicked on
 			if (LOWORD(wparam))
 			{
-				purple_debug_info("win7", "wm_activate %d, %d, %d\n", hwnd, LOWORD(wparam), HIWORD(wparam));
 				showConversation(conv);
 				return 0;
 			}
@@ -371,12 +363,10 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		{
 			// Handle one of the buttons on the thumbnail being pressed
 			//TODO We dont have thumbnail buttons yet
-			purple_debug_info("win7", "wm_command\n");
 		}	break;
 		case WM_DWMSENDICONICTHUMBNAIL:
 		{
 			// Thumbnail needs to be drawn
-			purple_debug_info("win7", "wm_dwmsendiconicthumbnail\n");
 			gconstpointer data = NULL;
 			PurpleStoredImage *custom_img = NULL;
 			size_t len;
@@ -425,8 +415,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				gint maxwidth = HIWORD(lparam);
 				gint maxheight = LOWORD(lparam);
 				gint newwidth, newheight;
-				//gint size = MIN( maxwidth, maxheight );
-				purple_debug_info("win7", "max size %d x %d\n", maxwidth, maxheight);
 				
 				newheight = maxheight;
 				newwidth = maxheight * ratio;
@@ -436,13 +424,10 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					newheight = maxheight * (1/ratio);
 				}
 				
-				purple_debug_info("win7", "scale to %d x %d\n", newwidth, newheight);
 				pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
-				purple_debug_info("win7", "scaled %d\n", pixbuf);
 				
 				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
 				
-				purple_debug_info("win7", "seticonicthumbnail (%d, %d)\n", hwnd, hbitmap);
 				DwmSetIconicThumbnail(hwnd, hbitmap, 1);
 				DeleteObject(mask);
 				DeleteObject(hbitmap);
@@ -454,7 +439,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
 		{
 			// Preview needs to be drawn
-			purple_debug_info("win7", "wm_dwmsendiconiclivepreviewbitmap\n");
 			
 			//TODO block pidgin events from handling tab change
 			guint signal_id = g_signal_lookup("switch_page", GTK_TYPE_NOTEBOOK);
@@ -486,8 +470,6 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				g_signal_handler_block(pconv->win->notebook, next_signal_handler);
 				purple_debug_info("win7", "blocked: %u\n", next_signal_handler);
 			}*/
-			
-			purple_debug_info("win7", "before: %u, after: %u, third: %u\n", store->pidgin_before_switch_conv_handler_id, store->pidgin_after_switch_conv_handler_id, store->pidgin_third_switch_conv_handler_id);
 			
 			// Switch to the right conversation, then take a screenshot
 			pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
@@ -574,15 +556,11 @@ win7_create_hiddenwin(PurpleConversation *conv)
 	BOOL fHasIconicBitmap = TRUE;
 	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
 	
-	purple_debug_info("win7", "Wname %s, DesktopWin %d, hInstance %d, modulehandle %d\n", wname, GetDesktopWindow(), winpidgin_exe_hinstance(), GetModuleHandle(NULL));
-	
 	/* Create the window */
 	hTab = CreateWindow(wname, purple_conversation_get_title(conv), 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
-	else
-		purple_debug_info("win7", "CreateWindow %d\n", hTab);
 
 	win7_update_icon(conv, PURPLE_CONV_UPDATE_ICON, NULL);
 	
@@ -647,8 +625,6 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "RegisterClassEx error %d\n", lasterror);
-	else
-		purple_debug_info("win7", "RegisterClassEx %d\n", thumbcls);
 	
 	//loop over all conversations
 	convs = purple_get_conversations();
@@ -686,8 +662,6 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
 	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
-	
-	purple_debug_info("win7", "on_conv_switch (%i, %i)\n", hWin, hTab);
 
 	if (!hTab)
 		hTab = win7_create_hiddenwin(conv);
@@ -698,10 +672,7 @@ static void
 on_conv_delete(PurpleConversation *conv, gpointer user_data)
 {
 	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
-	//PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
 	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
-
-	purple_debug_info("win7", "on_conv_delete (%i)\n", hTab);
 	
 	if (hTab)
 		itl->lpVtbl->UnregisterTab(itl, hTab);
@@ -717,8 +688,6 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
 	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
-
-	purple_debug_info("win7", "on_conv_create (%i, %i)\n", hWin, hTab);
 	
 	if (!hTab)
 		hTab = win7_create_hiddenwin(conv);
@@ -735,7 +704,6 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 static gboolean
 blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data)
 {
-	purple_debug_info("win7", "blist_delete_event_cb\n");
 	// Prevent the window from being closed,
 	// minimise instead
 	gtk_window_iconify(GTK_WINDOW(w));
@@ -757,8 +725,6 @@ create_alpha_bitmap (gint width, gint height,
   BITMAPV5HEADER bi;
   HDC hdc;
   HBITMAP hBitmap;
-  
-  purple_debug_info("win7", "create_alpha_bitmap\n");
 
   ZeroMemory (&bi, sizeof (BITMAPV5HEADER));
   bi.bV5Size = sizeof (BITMAPV5HEADER);
@@ -802,8 +768,6 @@ create_color_bitmap (gint width, gint height,
   } bmi;
   HDC hdc;
   HBITMAP hBitmap;
-  
-  purple_debug_info("win7", "create_color_bitmap\n");
 
   ZeroMemory (&bmi, sizeof (bmi));
   bmi.bmiHeader.bV4Size = sizeof (BITMAPV4HEADER);
@@ -1063,7 +1027,6 @@ static void
 win7_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old, gpointer data)
 {
 	PidginWin7Store *store = (PidginWin7Store *)data;
-	purple_debug_info("win7", "win7_on_status_change\n");
 	
 	ITaskbarList3 *itl = store->itl;
 	PidginBuddyList *blist = pidgin_blist_get_default_gtk_blist();
@@ -1151,7 +1114,6 @@ ft_update_transferred(gpointer data)
 	PurpleXfer *xfer = (PurpleXfer *)data;
 	ITaskbarList3 *itl = ((PidginWin7Store *)this_plugin->extra)->itl;
 	HWND ft_window;
-	purple_debug_info("win7", "ft_update_transferred\n");
 	
 	ft_window = pidgin_get_ft_hwnd();
 	if (!ft_window)
@@ -1176,7 +1138,6 @@ ft_update(PurpleXfer *xfer, gpointer data)
 {
 	ITaskbarList3 *itl = (ITaskbarList3 *)data;
 	HWND ft_window;
-	purple_debug_info("win7", "ft_update\n");
 	
 	ft_window = pidgin_get_ft_hwnd();
 	if (!ft_window)
@@ -1210,8 +1171,6 @@ void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl)
 	IObjectArray *poa;
 	IObjectCollection *shellLinks;
 	
-	purple_debug_info("win7", "create_jumplist\n");
-	
 	if (SUCCEEDED(pcdl->lpVtbl->BeginList(pcdl, &minSlots, &IID_IObjectArray, (void**)&poa)))
 		purple_debug_info("win7", "Beginlist begun\n");
 	HRESULT hr = CoCreateInstance(&CLSID_EnumerableObjectCollection, NULL, CLSCTX_INPROC_SERVER, &IID_IObjectCollection, (void**)&shellLinks);
@@ -1225,14 +1184,12 @@ void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl)
 }
 void pidgin_win7_delete_jumplist(ICustomDestinationList *pcdl)
 {
-	purple_debug_info("win7", "delete_jumplist\n");
 	pcdl->lpVtbl->DeleteList(pcdl, NULL);
 	pcdl->lpVtbl->Release(pcdl);
 }
 
 IShellLink *pidgin_win7_create_separator()
 {
-	purple_debug_info("win7", "create_separator\n");
 	IShellLink *psl = NULL;
 	
 	HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (void**)&psl);
@@ -1256,7 +1213,6 @@ IShellLink *pidgin_win7_create_separator()
 IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon, 
 	gint icon_index, const char *path, const char *args, const char *description)
 {
-	purple_debug_info("win7", "create_shell_link\n");
 	IShellLink *psl = NULL;
 	
 	HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (void**)&psl);
@@ -1308,12 +1264,10 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 	//IObjectCollection *shellLinks;
 	IShellLink *shellLink;
 	
-	purple_debug_info("win7", "add_tasks\n");
 	HRESULT hr = CoCreateInstance(&CLSID_EnumerableObjectCollection, NULL, CLSCTX_INPROC, &IID_IObjectCollection, (void**)&shellLinks);
 	if (SUCCEEDED(hr))
 	{
 		gchar *pidgin_path = g_find_program_in_path("pidgin");
-		purple_debug_info("win7", "pidgin_path %s\n", pidgin_path);
 		const gchar *iconpath = this_plugin->path;
 		
 		//Add tasks for sending a new message
