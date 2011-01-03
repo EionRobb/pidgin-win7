@@ -8,23 +8,35 @@ static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color
 static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
 static HBITMAP create_alpha_bitmap (gint width, gint height, guchar **outdata);
 
-// Conversation -> HWND  map
-static GHashTable *win7_conv_hwnd = NULL;
-// HWND -> Conversation  map
-static GHashTable *win7_hwnd_conv = NULL;
+// PidginConversation -> HWND  map
+static GHashTable *win7_pconv_hwnd = NULL;
+// HWND -> PidginConversation  map
+static GHashTable *win7_hwnd_pconv = NULL;
+
+HWND
+win7_get_hwnd_from_pconv(PidginConversation *gtkconv)
+{	
+	return g_hash_table_lookup(win7_pconv_hwnd, gtkconv);
+}
+
+PidginConversation *
+win7_get_pconv_from_hwnd(HWND hwnd)
+{
+	return g_hash_table_lookup(win7_hwnd_pconv, hwnd);
+}
 
 HWND
 win7_get_hwnd_from_conv(PurpleConversation *conv)
 {
 	PidginConversation *gtkconv = PIDGIN_CONVERSATION(conv);
 	
-	return g_hash_table_lookup(win7_conv_hwnd, conv);
+	return win7_get_hwnd_from_pconv(gtkconv);
 }
 
 PurpleConversation *
 win7_get_conv_from_hwnd(HWND hwnd)
 {
-	PidginConversation *gtkconv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
+	PidginConversation *gtkconv = win7_get_pconv_from_hwnd(hwnd);
 	
 	return gtkconv->active_conv;
 }
@@ -80,7 +92,7 @@ win7_tabthumb_each_cb(gpointer key, gpointer value, gpointer user_data)
 void
 win7_tabthumb_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data)
 {
-	g_hash_table_foreach(win7_conv_hwnd, win7_tabthumb_each_cb, data);
+	g_hash_table_foreach(win7_pconv_hwnd, win7_tabthumb_each_cb, data);
 }
 
 void
@@ -288,7 +300,7 @@ live_conv_cb(gpointer user_data)
 	gint width, height;
 	HBITMAP hbitmap, mask;
 	GdkPixbuf *pixbuf = NULL;
-	HWND hwnd = g_hash_table_lookup(win7_conv_hwnd, conv);
+	HWND hwnd = g_hash_table_lookup(win7_pconv_hwnd, pconv);
 	
 	gtk_window_get_size(GTK_WINDOW(pconv->win->window), &width, &height);
 	
@@ -333,16 +345,15 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	GdkPixbuf *pixbuf = NULL;
 	PidginWin7Store *store = (PidginWin7Store *)this_plugin->extra;
 	
-	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
-	if (!conv)
+	pconv = win7_get_pconv_from_hwnd(hwnd);
+	if (!pconv)
 		return DefWindowProc(hwnd, msg, wparam, lparam);
-	pconv = PIDGIN_CONVERSATION(conv);
+	conv = pconv->active_conv;
 	
 	switch(msg)
 	{
 		case WM_CREATE:
 		{
-			
 			// Create taskbar buttons?
 			//TODO We dont have thumbnail buttons yet
 		}	break;
@@ -496,7 +507,7 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 	FLASHWINFO info;
 	DWORD flashCount;
 	
-	hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	hTab = win7_get_hwnd_from_conv(conv);
 	if (hTab)
 	{
 		switch(type)
@@ -551,7 +562,7 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 
 /* Create hidden window to process convtab messages */
 static HWND 
-win7_create_hiddenwin(PurpleConversation *conv)
+win7_create_hiddenwin(PidginConversation *pconv)
 {
 	HWND hTab;
 	DWORD lasterror;
@@ -560,12 +571,12 @@ win7_create_hiddenwin(PurpleConversation *conv)
 	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
 	
 	/* Create the window */
-	hTab = CreateWindow(wname, purple_conversation_get_title(conv), 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
+	hTab = CreateWindow(wname, purple_conversation_get_title(pconv->active_conv), 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 
-	win7_update_icon(conv, PURPLE_CONV_UPDATE_ICON, NULL);
+	win7_update_icon(pconv->active_conv, PURPLE_CONV_UPDATE_ICON, NULL);
 	
 	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
 	{
@@ -576,8 +587,8 @@ win7_create_hiddenwin(PurpleConversation *conv)
 			sizeof(fHasIconicBitmap));
 	}
 	
-	g_hash_table_insert(win7_conv_hwnd, conv, hTab);
-	g_hash_table_insert(win7_hwnd_conv, hTab, conv);
+	g_hash_table_insert(win7_pconv_hwnd, pconv, hTab);
+	g_hash_table_insert(win7_hwnd_pconv, hTab, pconv);
 	
 	return hTab;
 }
@@ -585,16 +596,18 @@ static void
 win7_destroy_hiddenwin(PurpleConversation *conv)
 {
 	HWND hTab;
+	PidginConversation *pconv;
 	
-	hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	hTab = win7_get_hwnd_from_conv(conv);
 	
 	if(hTab)
 	{
 		DestroyWindow(hTab);
-		g_hash_table_remove(win7_hwnd_conv, hTab);
+		g_hash_table_remove(win7_hwnd_pconv, hTab);
 	}
 	
-	g_hash_table_remove(win7_conv_hwnd, conv);
+	pconv = PIDGIN_CONVERSATION(conv);
+	g_hash_table_remove(win7_pconv_hwnd, pconv);
 }
 
 static void
@@ -607,10 +620,10 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	DWORD lasterror;
 	ATOM thumbcls;
 
-	if (win7_hwnd_conv == NULL)
-		win7_hwnd_conv = g_hash_table_new(NULL, NULL);
-	if (win7_conv_hwnd == NULL)
-		win7_conv_hwnd = g_hash_table_new(NULL, NULL);
+	if (win7_hwnd_pconv == NULL)
+		win7_hwnd_pconv = g_hash_table_new(NULL, NULL);
+	if (win7_pconv_hwnd == NULL)
+		win7_pconv_hwnd = g_hash_table_new(NULL, NULL);
 	
 	wcex.cbSize 		= sizeof(wcex);
 	wcex.style			= 0;
@@ -664,10 +677,10 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
 	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
-	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 
 	if (!hTab)
-		hTab = win7_create_hiddenwin(conv);
+		hTab = win7_create_hiddenwin(pconv);
 	
 	itl->lpVtbl->SetTabActive(itl, hTab, hWin, 0);
 }
@@ -675,7 +688,7 @@ static void
 on_conv_delete(PurpleConversation *conv, gpointer user_data)
 {
 	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
-	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	HWND hTab = win7_get_hwnd_from_conv(conv);
 	
 	if (hTab)
 		itl->lpVtbl->UnregisterTab(itl, hTab);
@@ -695,15 +708,15 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 	ITaskbarList3 *itl = (ITaskbarList3 *)user_data;
 	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
-	HWND hTab = g_hash_table_lookup(win7_conv_hwnd, conv);
+	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 	
 	if (!hTab)
-		hTab = win7_create_hiddenwin(conv);
+		hTab = win7_create_hiddenwin(pconv);
 	
 	itl->lpVtbl->RegisterTab(itl, hTab, hWin);
 	itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
 	
-	label = gtk_label_get_text(GTK_LABEL(pconv->tab_label));
+	label = purple_conversation_get_title(conv);
 	wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);
 	itl->lpVtbl->SetThumbnailTooltip(itl, hTab, wlabel);
 	g_free(wlabel);
@@ -820,8 +833,6 @@ pixbuf_to_hbitmaps_alpha_winxp (GdkPixbuf *pixbuf,
   guchar *colordata, *colorrow, *maskdata, *maskbyte;
   gint width, height, i, i_offset, j, j_offset, rowstride;
   guint maskstride, mask_bit;
-  
-  purple_debug_misc("win7", "pixbuf_to_hbitmaps_alpha_winxp\n");
 
   width = gdk_pixbuf_get_width (pixbuf); /* width of icon */
   height = gdk_pixbuf_get_height (pixbuf); /* height of icon */
@@ -900,8 +911,6 @@ pixbuf_to_hbitmaps_normal (GdkPixbuf *pixbuf,
   gint width, height, i, i_offset, j, j_offset, rowstride, nc, bmstride;
   gboolean has_alpha;
   guint maskstride, mask_bit;
-  
-  purple_debug_misc("win7", "pixbuf_to_hbitmaps_normal\n");
 
   width = gdk_pixbuf_get_width (pixbuf); /* width of icon */
   height = gdk_pixbuf_get_height (pixbuf); /* height of icon */
