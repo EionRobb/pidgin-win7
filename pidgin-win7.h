@@ -555,6 +555,12 @@ typedef struct {
 	ITaskbarList3 *itl;
 	gulong blist_destroy_handler_id;
 	gulong pidgin_destroy_handler_id;
+	
+	// Conversation tab switching
+	gulong pidgin_before_switch_conv_handler_id;
+	gulong pidgin_after_switch_conv_handler_id;
+	gulong pidgin_third_switch_conv_handler_id;
+	gulong conv_switch_tab_id;
 } PidginWin7Store;
 
 void win7_jumplist_pref_cb(const gchar *name, PurplePrefType type, gconstpointer val, gpointer data);
