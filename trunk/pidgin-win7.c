@@ -507,6 +507,7 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 			case PURPLE_CONV_ACCOUNT_OFFLINE:
 			case PURPLE_CONV_UPDATE_AWAY:
 			case PURPLE_CONV_UPDATE_ICON:
+			case PURPLE_CONV_UPDATE_TITLE:
 			{
 				// Set the icon for the 'window'
 				icon = pidgin_conv_get_tab_icon(conv, FALSE);

@@ -647,7 +647,7 @@ plugin_init(PurplePlugin *plugin)
 	purple_prefs_add_none(PREF_PREFIX);
 	purple_prefs_add_bool(PREF_JUMPLIST, TRUE);
 	purple_prefs_add_bool(PREF_OVERLAY_ICON, TRUE);
-	purple_prefs_add_bool(PREF_CONV_WIN, FALSE);
+	purple_prefs_add_bool(PREF_CONV_WIN, TRUE);
 	purple_prefs_add_bool(PREF_TAB_THUMBS, FALSE);
 	purple_prefs_add_bool(PREF_FILE_PROGRESS, TRUE);
 }
@@ -669,7 +669,7 @@ plugin_config_frame(PurplePlugin *plugin)
 	pref = purple_plugin_pref_new_with_name_and_label(PREF_FILE_PROGRESS, _("Show file transfer progress"));
 	purple_plugin_pref_frame_add(frame, pref);
 
-	pref = purple_plugin_pref_new_with_name_and_label(PREF_CONV_WIN, _("Seperate conversation tabs into seperate windows (Buggy)"));
+	pref = purple_plugin_pref_new_with_name_and_label(PREF_CONV_WIN, _("Seperate conversation tabs into seperate windows"));
 	purple_plugin_pref_frame_add(frame, pref);
 	
 	pref = purple_plugin_pref_new_with_name_and_label(PREF_TAB_THUMBS, _("Show tab thumbnail previews/aero peek (Buggy)"));
