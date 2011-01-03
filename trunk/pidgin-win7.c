@@ -278,6 +278,40 @@ win7_blist_set_visible(PurpleBuddyList *list, gboolean show)
 	}
 }
 
+static gboolean
+live_conv_cb(gpointer user_data)
+{
+	PurpleConversation *conv = user_data;
+	PidginConversation *pconv = PIDGIN_CONVERSATION(conv);
+	gint width, height;
+	HBITMAP hbitmap, mask;
+	GdkPixbuf *pixbuf = NULL;
+	HWND hwnd = g_hash_table_lookup(win7_conv_hwnd, conv);
+	
+	purple_debug_info("win7", "live_conv_cb\n");
+	
+	gtk_window_get_size(GTK_WINDOW(pconv->win->window), &width, &height);
+	
+	// Make a 32bit transparent pixbuf
+	pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
+	pixbuf = gdk_pixbuf_get_from_drawable(pixbuf, GDK_DRAWABLE(pconv->win->window->window), NULL, 0, 0, 0, 0, width, height);
+	
+	purple_debug_info("win7", "pixbuf: %d, width: %d, height: %d\n", pixbuf, width, height);
+	
+	POINT offset = { 0, 0 };
+	pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
+	purple_debug_info("win7", "hbitmap: %d\n", hbitmap);
+	
+	//DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, DWM_SIT_DISPLAYFRAME);
+	DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, 0);
+	
+	DeleteObject(mask);
+	DeleteObject(hbitmap);
+	g_object_unref(pixbuf);
+	
+	return FALSE;
+}
+
 /* From pidginsnarl */
 static void
 showConversation(PurpleConversation *conv){
@@ -300,6 +334,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	PidginConversation *pconv;
 	HBITMAP hbitmap, mask;
 	GdkPixbuf *pixbuf = NULL;
+	PidginWin7Store *store = (PidginWin7Store *)this_plugin->extra;
 	
 	conv = g_hash_table_lookup(win7_hwnd_conv, hwnd);
 	if (!conv)
@@ -421,28 +456,47 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			// Preview needs to be drawn
 			purple_debug_info("win7", "wm_dwmsendiconiclivepreviewbitmap\n");
 			
+			//TODO block pidgin events from handling tab change
+			guint signal_id = g_signal_lookup("switch_page", GTK_TYPE_NOTEBOOK);
+			if (!store->pidgin_before_switch_conv_handler_id)
+			{
+				store->pidgin_before_switch_conv_handler_id = 
+					g_signal_handler_find(pconv->win->notebook, G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED | G_SIGNAL_MATCH_DATA,
+								signal_id, 0, NULL, NULL, pconv->win);
+			}
+			g_signal_handler_block(pconv->win->notebook, store->pidgin_before_switch_conv_handler_id);
+			if (!store->pidgin_after_switch_conv_handler_id)
+			{
+				/*store->pidgin_after_switch_conv_handler_id = 
+					g_signal_handler_find(pconv->win->notebook, G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED | G_SIGNAL_MATCH_DATA,
+								signal_id, 0, NULL, NULL, pconv->win);*/
+				store->pidgin_after_switch_conv_handler_id = store->pidgin_before_switch_conv_handler_id + 1;		
+			}
+			g_signal_handler_block(pconv->win->notebook, store->pidgin_after_switch_conv_handler_id);
+			/*if (!store->pidgin_third_switch_conv_handler_id)
+			{
+				store->pidgin_third_switch_conv_handler_id = 
+					g_signal_handler_find(pconv->win->notebook, G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED | G_SIGNAL_MATCH_DATA,
+								signal_id, 0, NULL, NULL, pconv->win);
+			}
+			g_signal_handler_block(pconv->win->notebook, store->pidgin_third_switch_conv_handler_id);*/
+			/*gulong next_signal_handler = 0;
+			while ((next_signal_handler = g_signal_handler_find(pconv->win->notebook, G_SIGNAL_MATCH_ID | G_SIGNAL_MATCH_UNBLOCKED, signal_id, 0, NULL, NULL, NULL)))
+			{
+				g_signal_handler_block(pconv->win->notebook, next_signal_handler);
+				purple_debug_info("win7", "blocked: %u\n", next_signal_handler);
+			}*/
+			
+			purple_debug_info("win7", "before: %u, after: %u, third: %u\n", store->pidgin_before_switch_conv_handler_id, store->pidgin_after_switch_conv_handler_id, store->pidgin_third_switch_conv_handler_id);
+			
 			// Switch to the right conversation, then take a screenshot
 			pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
-			gint width, height;
 			
-			gtk_window_get_size(GTK_WINDOW(pconv->win->window), &width, &height);
+			g_signal_handler_unblock(pconv->win->notebook, store->pidgin_before_switch_conv_handler_id);
+			g_signal_handler_unblock(pconv->win->notebook, store->pidgin_after_switch_conv_handler_id);
 			
-			// Make a 32bit transparent pixbuf
-			pixbuf = gdk_pixbuf_new(GDK_COLORSPACE_RGB, TRUE, 8, width, height);
-			pixbuf = gdk_pixbuf_get_from_drawable(pixbuf, GDK_DRAWABLE(pconv->win->window->window), NULL, 0, 0, 0, 0, width, height);
-			
-			purple_debug_info("win7", "pixbuf: %d, width: %d, height: %d\n", pixbuf, width, height);
-			
-			POINT offset = { 0, 0 };			
-			pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-			purple_debug_info("win7", "hbitmap: %d\n", hbitmap);
-			
-			//DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, DWM_SIT_DISPLAYFRAME);
-			DwmSetIconicLivePreviewBitmap(hwnd, hbitmap, &offset, 0);
-			
-			DeleteObject(mask);
-			DeleteObject(hbitmap);
-			g_object_unref(pixbuf);
+			// Tab updates could take up to 22ms
+			purple_timeout_add(30, (GSourceFunc)live_conv_cb, conv);
 			
 			return 0;
 		}	break;
