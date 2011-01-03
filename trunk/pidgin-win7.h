@@ -534,6 +534,7 @@ static void win7_on_status_change(PurpleSavedStatus *new, PurpleSavedStatus *old
 static gboolean blist_delete_event_cb(GtkWidget *w, GdkEvent *e, gpointer user_data);
 static void on_conv_switch(PurpleConversation *conv, gpointer user_data);
 static void on_conv_delete(PurpleConversation *conv, gpointer user_data);
+static void on_conv_hide(PidginConversation *conv, gpointer user_data);
 static void on_conv_create(PurpleConversation *conv, gpointer user_data);
 static void win7_init_conv_windows(ITaskbarList3 *itl);
 static void win7_destroy_conv_windows(ITaskbarList3 *itl);
