@@ -237,6 +237,7 @@ win7_enable_convwin(PidginWin7Store *store)
 		
 		// Connect to the signals for creating, deleting, focusing conversations
 		purple_signal_connect(pidgin_conversations_get_handle(), "conversation-switched", this_plugin, PURPLE_CALLBACK(on_conv_switch), store->itl);
+		purple_signal_connect(pidgin_conversations_get_handle(), "conversation-hiding", this_plugin, PURPLE_CALLBACK(on_conv_hide), store->itl);
 		purple_signal_connect(purple_conversations_get_handle(), "deleting-conversation", this_plugin, PURPLE_CALLBACK(on_conv_delete), store->itl);
 		purple_signal_connect(purple_conversations_get_handle(), "conversation-created", this_plugin, PURPLE_CALLBACK(on_conv_create), store->itl);
 		purple_signal_connect(purple_conversations_get_handle(), "conversation-updated", this_plugin, PURPLE_CALLBACK(win7_update_icon), NULL);
@@ -251,6 +252,7 @@ void
 win7_disable_convwin(PidginWin7Store *store)
 {
 	purple_signal_disconnect(pidgin_conversations_get_handle(), "conversation-switched", this_plugin, PURPLE_CALLBACK(on_conv_switch));
+	purple_signal_disconnect(pidgin_conversations_get_handle(), "conversation-hiding", this_plugin, PURPLE_CALLBACK(on_conv_hide));
 	purple_signal_disconnect(purple_conversations_get_handle(), "deleting-conversation", this_plugin, PURPLE_CALLBACK(on_conv_delete));
 	purple_signal_disconnect(purple_conversations_get_handle(), "conversation-created", this_plugin, PURPLE_CALLBACK(on_conv_create));
 	purple_signal_disconnect(purple_conversations_get_handle(), "conversation-updated", this_plugin, PURPLE_CALLBACK(win7_update_icon));
@@ -679,6 +681,11 @@ on_conv_delete(PurpleConversation *conv, gpointer user_data)
 		itl->lpVtbl->UnregisterTab(itl, hTab);
 	
 	win7_destroy_hiddenwin(conv);
+}
+static void
+on_conv_hide(PidginConversation *pconv, gpointer user_data)
+{
+	on_conv_delete(pconv->active_conv, user_data);
 }
 static void
 on_conv_create(PurpleConversation *conv, gpointer user_data)
