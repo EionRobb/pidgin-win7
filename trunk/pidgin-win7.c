@@ -439,11 +439,15 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 				
 				pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
 				
+				if (!gdk_pixbuf_get_has_alpha(pixbuf))
+					pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
+				
 				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
 				
 				DwmSetIconicThumbnail(hwnd, hbitmap, 1);
 				DeleteObject(mask);
 				DeleteObject(hbitmap);
+				g_object_unref(pixbuf);
 				
 				return 0;
 			}
