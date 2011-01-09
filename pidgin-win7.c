@@ -424,7 +424,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			{
 				gint original_width = gdk_pixbuf_get_width (pixbuf);
 				gint original_height = gdk_pixbuf_get_height (pixbuf);
-				gint ratio = original_width / original_height;
+				gfloat ratio = original_width / (gfloat) original_height;
 				gint maxwidth = HIWORD(lparam);
 				gint maxheight = LOWORD(lparam);
 				gint newwidth, newheight;
