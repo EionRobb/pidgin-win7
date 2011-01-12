@@ -1124,6 +1124,9 @@ pidgin_get_ft_hwnd()
 	
 	xfer_dialog = pidgin_get_xfer_dialog();
 	
+	if (!xfer_dialog)
+		return NULL;
+	
 	ft_window = GDK_WINDOW_HWND(gtk_widget_get_window(xfer_dialog->window));
 	
 	return ft_window;
