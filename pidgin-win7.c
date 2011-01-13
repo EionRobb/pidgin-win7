@@ -668,7 +668,7 @@ win7_destroy_conv_windows(ITaskbarList3 *itl)
 {
 	GList *convs;
 	PurpleConversation *conv;
-	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	LPCWSTR wname = L"WinpidginConvThumbCls";
 	
 	//loop over all conversations
 	convs = purple_get_conversations();
@@ -679,7 +679,7 @@ win7_destroy_conv_windows(ITaskbarList3 *itl)
 		on_conv_delete(conv, itl);
 	}
 	
-	UnregisterClass(wname, NULL);
+	UnregisterClassW(wname, NULL);
 }
 
 static void
