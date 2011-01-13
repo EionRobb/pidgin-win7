@@ -533,9 +533,12 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 					SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)pixbuf_to_hicon(icon));
 					g_object_unref(icon);
 				}
-				
+
+				wchar_t *wlabel = g_utf8_to_utf16(purple_conversation_get_title(conv), -1, NULL, NULL, NULL);
 				// Set the title for the 'window'
-				SendMessage(hTab, WM_SETTEXT, 0, (LPARAM)purple_conversation_get_title(conv));
+				//SendMessageW(hTab, WM_SETTEXT, 0, (LPARAM)wlabel);
+				SetWindowTextW(hTab, wlabel);
+				g_free(wlabel);
 				
 				// Invalidate the thumbnail preview
 				DwmInvalidateIconicBitmaps(hTab);
@@ -572,10 +575,14 @@ win7_create_hiddenwin(PidginConversation *pconv)
 	DWORD lasterror;
 	BOOL fForceIconic = TRUE;
 	BOOL fHasIconicBitmap = TRUE;
-	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	LPCWSTR wname = L"WinpidginConvThumbCls";
+	wchar_t *wlabel;
 	
 	/* Create the window */
-	hTab = CreateWindow(wname, purple_conversation_get_title(pconv->active_conv), 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
+	wlabel = g_utf8_to_utf16(purple_conversation_get_title(pconv->active_conv), -1, NULL, NULL, NULL);
+	hTab = CreateWindowW(wname, wlabel, 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
+	g_free(wlabel);
+	
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
