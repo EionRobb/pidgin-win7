@@ -347,7 +347,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 	
 	pconv = win7_get_pconv_from_hwnd(hwnd);
 	if (!pconv)
-		return DefWindowProc(hwnd, msg, wparam, lparam);
+		return DefWindowProcW(hwnd, msg, wparam, lparam);
 	conv = pconv->active_conv;
 	
 	switch(msg)
@@ -500,7 +500,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			return 0;
 		}	break;
 	}
-	return DefWindowProc(hwnd, msg, wparam, lparam);
+	return DefWindowProcW(hwnd, msg, wparam, lparam);
 }
 
 static void
@@ -624,10 +624,10 @@ win7_destroy_hiddenwin(PurpleConversation *conv)
 static void
 win7_init_conv_windows(ITaskbarList3 *itl)
 {
-	WNDCLASSEX wcex;
+	WNDCLASSEXW wcex;
 	GList *convs;
 	PurpleConversation *conv;
-	LPCTSTR wname = TEXT("WinpidginConvThumbCls");
+	LPCWSTR wname = L"WinpidginConvThumbCls";
 	DWORD lasterror;
 	ATOM thumbcls;
 
@@ -638,7 +638,7 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	
 	wcex.cbSize 		= sizeof(wcex);
 	wcex.style			= 0;
-	wcex.lpfnWndProc	= (WNDPROC) win7_conv_handler;  //DefWindowProc;
+	wcex.lpfnWndProc	= (WNDPROC) win7_conv_handler;  //DefWindowProcW;
 	wcex.cbClsExtra		= 0;
 	wcex.cbWndExtra		= 0;
 	wcex.hInstance		= winpidgin_exe_hinstance();
@@ -648,7 +648,7 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	wcex.lpszMenuName	= NULL;
 	wcex.lpszClassName	= wname;
 	wcex.hIconSm		= NULL;
-	thumbcls = RegisterClassEx(&wcex);
+	thumbcls = RegisterClassExW(&wcex);
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "RegisterClassEx error %d\n", lasterror);
