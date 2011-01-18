@@ -383,6 +383,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			gconstpointer data = NULL;
 			PurpleStoredImage *custom_img = NULL;
 			size_t len;
+			GdkPixbuf *temp_pixbuf = NULL;
 			/*PurpleAccount *account = purple_conversation_get_account(conv);
 			PurpleBuddy *buddy = purple_find_buddy(account, purple_conversation_get_name(conv));
 			if (buddy)
@@ -437,10 +438,16 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 					newheight = maxwidth * (1/ratio);
 				}
 				
-				pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
+				temp_pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
+				g_object_unref(pixbuf);
+				pixbuf = temp_pixbuf;
 				
 				if (!gdk_pixbuf_get_has_alpha(pixbuf))
-					pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
+				{
+					temp_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
+					g_object_unref(pixbuf);
+					pixbuf = temp_pixbuf;
+				}
 				
 				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
 				
@@ -490,6 +497,7 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 			
 			// Switch to the right conversation, then take a screenshot
 			pidgin_conv_window_switch_gtkconv(pconv->win, pconv);
+			gtk_window_present(GTK_WINDOW(pconv->win->window));
 			
 			g_signal_handler_unblock(pconv->win->notebook, store->pidgin_before_switch_conv_handler_id);
 			g_signal_handler_unblock(pconv->win->notebook, store->pidgin_after_switch_conv_handler_id);
