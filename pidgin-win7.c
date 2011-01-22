@@ -1310,11 +1310,11 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		const gchar *iconpath = this_plugin->path;
 		
 		//Add tasks for sending a new message
-		shellLink = pidgin_win7_create_shell_link(_("New _Message..."), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=im", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("New _Message..."), iconpath, 6, pidgin_path, "--protocolhandler=win7:open?window=im", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
-		shellLink = pidgin_win7_create_shell_link(_("Join Chat..."), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=chat", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Join Chat..."), iconpath, 7, pidgin_path, "--protocolhandler=win7:open?window=chat", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
@@ -1358,15 +1358,15 @@ pidgin_win7_add_tasks(ICustomDestinationList *pcdl, IObjectCollection *shellLink
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
-		shellLink = pidgin_win7_create_shell_link(_("Plu_gins"), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=plugins", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Plu_gins"), iconpath, 8, pidgin_path, "--protocolhandler=win7:open?window=plugins", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
-		shellLink = pidgin_win7_create_shell_link(_("Pr_eferences"), NULL, 0, pidgin_path, "--protocolhandler=win7:open?window=prefs", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("Pr_eferences"), iconpath, 9, pidgin_path, "--protocolhandler=win7:open?window=prefs", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 		
-		shellLink = pidgin_win7_create_shell_link(_("_Quit"), NULL, 0, pidgin_path, "--protocolhandler=win7:quit", NULL);
+		shellLink = pidgin_win7_create_shell_link(_("_Quit"), iconpath, 10, pidgin_path, "--protocolhandler=win7:quit", NULL);
 		shellLinks->lpVtbl->AddObject(shellLinks, (IUnknown *)shellLink);
 		shellLink->lpVtbl->Release(shellLink);
 
