@@ -1,6 +1,6 @@
 1 VERSIONINFO
-FILEVERSION 0,4,0,0
-PRODUCTVERSION 0,4,0,0
+FILEVERSION 0,5,0,0
+PRODUCTVERSION 0,5,0,0
 FILEFLAGSMASK 0
 FILEFLAGS 0
 FILEOS 0x40004 // VOS_NT_WINDOWS32
@@ -12,12 +12,12 @@ BLOCK "StringFileInfo"
 	{
 		VALUE "CompanyName", "Eion Robb\0"
 		VALUE "FileDescription", "Windows 7 Extensions for Pidgin\0"
-		VALUE "FileVersion", "0.4"
+		VALUE "FileVersion", "0.5"
 		VALUE "InternalName", "pidgin-win7"
-		VALUE "LegalCopyright", "Copyright (C) 1998-2010 The Pidgin developer community (See the COPYRIGHT file in the source distribution)."
-		VALUE "OriginalFilename", "pidgin.dll"
+		VALUE "LegalCopyright", "Copyright (C) 2010-2011 Eion Robb"
+		VALUE "OriginalFilename", "pidgin-win7.dll"
 		VALUE "ProductName", "Win7Pidgin"
-		VALUE "ProductVersion", "0.4"
+		VALUE "ProductVersion", "0.5"
 	}
 }
 BLOCK "VarFileInfo"
