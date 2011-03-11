@@ -3,6 +3,11 @@
 
 = Changelog =
 
+== Version 5 ==
+  * More icons in the jump list
+  * Fixed memory leaks
+  * Fixed window thumbnails
+
 == Version 4 ==
   * Plugin configuration through preferences screen
   * Separate chat/IM 'window's per tab
