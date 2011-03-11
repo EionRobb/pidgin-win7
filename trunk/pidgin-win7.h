@@ -12,6 +12,9 @@
 #include <gtk/gtk.h>
 #include <gdk/gdkwin32.h>
 
+#define GETTEXT_PACKAGE "pidgin"
+#include <glib/gi18n-lib.h>
+
 #ifndef PURPLE_PLUGINS
 #	define PURPLE_PLUGINS
 #endif
@@ -35,10 +38,6 @@
 #include "gtkplugin.h"
 #include "gtkaccount.h"
 #include "gtkprefs.h"
-
-#ifndef _
-#define _(a) (a)
-#endif
 
 #ifndef PIDGIN_PLUGIN_TYPE
 #define PIDGIN_UI "gtk-gaim"
