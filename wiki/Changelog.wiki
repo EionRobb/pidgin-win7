@@ -7,6 +7,9 @@
   * More icons in the jump list
   * Fixed memory leaks
   * Fixed window thumbnails
+  * Fixes for closing 'persistent' conversations
+  * Fixes for crashing when receiving files
+  * Fixes for UTF-8 characters in window titles
 
 == Version 4 ==
   * Plugin configuration through preferences screen
