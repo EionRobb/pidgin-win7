@@ -517,7 +517,6 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 	HWND hTab;
 	GdkPixbuf *icon;
 	FLASHWINFO info;
-	DWORD flashCount;
 	
 	hTab = win7_get_hwnd_from_conv(conv);
 	if (hTab)
@@ -559,9 +558,7 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 				info.hwnd = hTab;
 				if (purple_conversation_get_data(conv, "unseen-count"))
 				{
-					info.uCount = 3;
-					if (SystemParametersInfo(SPI_GETFOREGROUNDFLASHCOUNT, 0, &flashCount, 0))
-						info.uCount = flashCount;
+					info.uCount = 1;
 					info.dwFlags = FLASHW_ALL | FLASHW_TIMER;
 				} else {
 					info.dwFlags = FLASHW_STOP;
@@ -1253,6 +1250,7 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 	gint icon_index, const char *path, const char *args, const char *description)
 {
 	IShellLink *psl = NULL;
+	gchar *stripped_title;
 	
 	HRESULT hr = CoCreateInstance(&CLSID_ShellLink, NULL, CLSCTX_INPROC_SERVER, &IID_IShellLink, (void**)&psl);
 	if (SUCCEEDED(hr))
@@ -1278,19 +1276,22 @@ IShellLink *pidgin_win7_create_shell_link(const char *title, const char *icon,
 			//Add title
 			IPropertyStore *pps;
 			PROPVARIANT propvar;
+			
+			// Remove all the _ characters (from the translations)
+			stripped_title = g_strdup(title);
+			purple_str_strip_char(stripped_title, '_');
 
 			psl->lpVtbl->QueryInterface(psl, &IID_IPropertyStore, (void **)&pps);
 			PropVariantInit(&propvar);
-			propvar.vt = VT_LPSTR;
-			propvar.pszVal = g_strdup(title);
-			
-			// Remove all the _ characters (from the translations)
-			purple_str_strip_char(propvar.pszVal, '_');
+			propvar.vt = VT_LPWSTR;
+			propvar.pwszVal = g_utf8_to_utf16(stripped_title, -1, NULL, NULL, NULL);
 			
 			pps->lpVtbl->SetValue(pps, &PKEY_Title, &propvar);
 			g_free(propvar.pszVal);
 			pps->lpVtbl->Commit(pps);
 			pps->lpVtbl->Release(pps);
+			
+			g_free(stripped_title);
 		}
 	}
 	
