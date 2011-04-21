@@ -1455,22 +1455,28 @@ uri_handler(const char *proto, const char *cmd, GHashTable *params)
 		if (g_str_equal(temp, "im"))
 		{
 			pidgin_dialogs_im();
+			return TRUE;
 		} else if (g_str_equal(temp, "chat"))
 		{
 			pidgin_blist_joinchat_show();
+			return TRUE;
 		} else if (g_str_equal(temp, "plugins"))
 		{
 			pidgin_plugin_dialog_show();
+			return TRUE;
 		} else if (g_str_equal(temp, "accounts"))
 		{
 			pidgin_accounts_window_show();
+			return TRUE;
 		} else if (g_str_equal(temp, "prefs"))
 		{
 			pidgin_prefs_show();
+			return TRUE;
 		}
 	} else if (g_str_equal(cmd, "quit"))
 	{
 		purple_core_quit();
+		return TRUE;
 	}
 	
 	//we don't know how to handle this
