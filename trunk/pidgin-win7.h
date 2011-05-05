@@ -44,6 +44,8 @@
 #define PIDGIN_PLUGIN_TYPE PIDGIN_UI
 #endif
 
+#define PIDGIN_WIN7_APPID L"Pidgin.Win7Plugin"
+
 #ifndef __RPC__in
 #define __RPC__in
 #define __RPC__in_opt
@@ -650,6 +652,8 @@ plugin_init(PurplePlugin *plugin)
 	purple_prefs_add_bool(PREF_CONV_WIN, TRUE);
 	purple_prefs_add_bool(PREF_TAB_THUMBS, FALSE);
 	purple_prefs_add_bool(PREF_FILE_PROGRESS, TRUE);
+	
+	SetCurrentProcessExplicitAppUserModelID(PIDGIN_WIN7_APPID);
 }
 
 static PurplePluginPrefFrame *

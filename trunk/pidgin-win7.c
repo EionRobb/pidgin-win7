@@ -1207,6 +1207,8 @@ void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl)
 	IObjectArray *poa;
 	IObjectCollection *shellLinks;
 	
+	pcdl->lpVtbl->SetAppID(pcdl, PIDGIN_WIN7_APPID);
+	
 	if (SUCCEEDED(pcdl->lpVtbl->BeginList(pcdl, &minSlots, &IID_IObjectArray, (void**)&poa)))
 		purple_debug_info("win7", "Beginlist begun\n");
 	HRESULT hr = CoCreateInstance(&CLSID_EnumerableObjectCollection, NULL, CLSCTX_INPROC_SERVER, &IID_IObjectCollection, (void**)&shellLinks);
