@@ -1477,7 +1477,7 @@ uri_handler(const char *proto, const char *cmd, GHashTable *params)
 		}
 	} else if (g_str_equal(cmd, "quit"))
 	{
-		purple_core_quit();
+		purple_timeout_add_seconds(1, (GSourceFunc) purple_core_quit, NULL);
 		return TRUE;
 	}
 	
