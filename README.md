@@ -3,7 +3,7 @@ This plugin for Pidgin aims to add new Windows 7 functionality to Pidgin, includ
 [![](https://www.paypal.com/en_US/i/btn/btn_donateCC_LG_global.gif)](https://www.paypal.com/cgi-bin/webscr?cmd=_s-xclick&hosted_button_id=E4YHWTXKQ2KH8)
 
 
-To install, copy the dll into C:\Program Files\Pidgin\plugins (or C:\Program Files (x86)\Pidgin\plugins on 64-bit Windows).  If you've installed an older copy of the plugin before, make sure to remove the old copy from the plugins folder.
+To install, copy the dll from https://github.com/EionRobb/pidgin-win7/releases into C:\Program Files\Pidgin\plugins (or C:\Program Files (x86)\Pidgin\plugins on 64-bit Windows).  If you've installed an older copy of the plugin before, make sure to remove the old copy from the plugins folder.
 After you've copied it, open up the plugins list (Tools->Plugins) and enable the 'Windows 7' plugin.  You can also click the 'Configure Plugin' button to enable/disable different features.
 
 
