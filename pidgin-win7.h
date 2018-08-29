@@ -44,7 +44,7 @@
 #define PIDGIN_PLUGIN_TYPE PIDGIN_UI
 #endif
 
-#define PIDGIN_WIN7_APPID L"Pidgin.Win7Plugin"
+#define PIDGIN_WIN7_APPID L"Pidgin.Pidgin"
 
 #ifndef __RPC__in
 #define __RPC__in
