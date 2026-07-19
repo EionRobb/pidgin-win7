@@ -1,15 +1,43 @@
-
+#ifndef WINVER
+#define WINVER 0x0601
+#endif
+#ifndef _WIN32_WINNT
+#define _WIN32_WINNT 0x0601
+#endif
 #define INITGUID
 #include <windows.h>
 #include <wtypes.h>
-#include <shobjidl.h>
+#ifndef __MINGW32__
+#	include <shobjidl.h>
+#else
+#	include <shlobj.h>
+#endif
 #include <shlguid.h>
 //#include <propkeydef.h>
 //#include <propsys.h>
 #include <initguid.h>
 
+#ifdef __MINGW32__
+#ifndef __MIDL_CONST
+#define __MIDL_CONST
+#endif
+#ifndef PropVariantInit
+#define PropVariantInit(pvar) memset((pvar), 0, sizeof(PROPVARIANT))
+#endif
+extern HRESULT WINAPI SetCurrentProcessExplicitAppUserModelID(LPCWSTR AppID);
+#endif
+
+#ifdef __cplusplus
+#define EXTERN_GUID EXTERN_C
+#else
+#define EXTERN_GUID
+#endif
+
 #include <glib.h>
 #include <gtk/gtk.h>
+#if !GTK_CHECK_VERSION(2, 14, 0)
+#define gtk_widget_get_window(widget) ((widget)->window)
+#endif
 #include <gdk/gdkwin32.h>
 
 #define GETTEXT_PACKAGE "pidgin"
@@ -20,6 +48,7 @@
 #endif
 
 // Libpurple includes
+#include "purple.h"
 #include "core.h"
 #include "savedstatuses.h"
 #include "signals.h"
@@ -29,6 +58,7 @@
 #include "buddyicon.h"
 
 // Pidgin includes
+#include "pidgin.h"
 #include "gtkft.h"
 #include "gtkblist.h"
 #include "pidginstock.h"
@@ -119,7 +149,7 @@ interface IObjectArray
 	CONST_VTBL struct IObjectArrayVtbl *lpVtbl;
 };
 
-EXTERN_C const IID IID_IObjectArray = {0x92CA9DCD,0x5622,0x4bba,{0xA8,0x05,0x5E,0x9F,0x54,0x1B,0xD8,0xC9}}; // 92CA9DCD-5622-4bba-A805-5E9F541BD8C9
+DECLSPEC_SELECTANY EXTERN_GUID const IID IID_IObjectArray = {0x92CA9DCD,0x5622,0x4bba,{0xA8,0x05,0x5E,0x9F,0x54,0x1B,0xD8,0xC9}}; // 92CA9DCD-5622-4bba-A805-5E9F541BD8C9
 
 #endif  // __IObjectArray_INTERFACE_DEFINED__
 
@@ -175,7 +205,7 @@ interface IObjectCollection
 	CONST_VTBL struct IObjectCollectionVtbl *lpVtbl;
 };
 
-EXTERN_C const IID IID_IObjectCollection = {0x5632b1a4,0xe38a,0x400a,{0x92,0x8a,0xd4,0xcd,0x63,0x23,0x02,0x95}}; // 5632b1a4-e38a-400a-928a-d4cd63230295
+DECLSPEC_SELECTANY EXTERN_GUID const IID IID_IObjectCollection = {0x5632b1a4,0xe38a,0x400a,{0x92,0x8a,0xd4,0xcd,0x63,0x23,0x02,0x95}}; // 5632b1a4-e38a-400a-928a-d4cd63230295
 
 #endif  // __IObjectCollection_INTERFACE_DEFINED__
 
@@ -252,15 +282,15 @@ interface ICustomDestinationList
 	CONST_VTBL struct ICustomDestinationListVtbl *lpVtbl;
 };
 
-EXTERN_C const IID IID_ICustomDestinationList = {0x6332debf,0x87b5,0x4670,{0x90,0xc0,0x5e,0x57,0xb4,0x08,0xa4,0x9e}}; // 6332debf-87b5-4670-90c0-5e57b408a49e;
+DECLSPEC_SELECTANY EXTERN_GUID const IID IID_ICustomDestinationList = {0x6332debf,0x87b5,0x4670,{0x90,0xc0,0x5e,0x57,0xb4,0x08,0xa4,0x9e}}; // 6332debf-87b5-4670-90c0-5e57b408a49e;
 
 #endif  // __ICustomDestinationList_INTERFACE_DEFINED__
 
-const CLSID CLSID_DestinationList = {
+DECLSPEC_SELECTANY const CLSID CLSID_DestinationList = {
   0x77f10cf0, 0x3db5, 0x4966, {0xb5, 0x20, 0xb7, 0xc5, 0x4f, 0xd3, 0x5e, 0xd6}
 };
 
-const CLSID CLSID_EnumerableObjectCollection = {
+DECLSPEC_SELECTANY const CLSID CLSID_EnumerableObjectCollection = {
   0x2d3468c1, 0x36a7, 0x43b6, {0xac, 0x24, 0xd3, 0xf0, 0x2f, 0xd9, 0x60, 0x7a}
 };
 
@@ -272,7 +302,7 @@ typedef struct {
 #define REFPROPERTYKEY const PROPERTYKEY * __MIDL_CONST
 #define REFPROPVARIANT const PROPVARIANT * __MIDL_CONST
 #ifdef INITGUID
-#define DEFINE_PROPERTYKEY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) EXTERN_C const PROPERTYKEY /*DECLSPEC_SELECTANY*/ name = { { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }, pid }
+#define DEFINE_PROPERTYKEY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) EXTERN_GUID DECLSPEC_SELECTANY const PROPERTYKEY name = { { l, w1, w2, { b1, b2,  b3,  b4,  b5,  b6,  b7,  b8 } }, pid }
 #else
 #define DEFINE_PROPERTYKEY(name, l, w1, w2, b1, b2, b3, b4, b5, b6, b7, b8, pid) EXTERN_C const PROPERTYKEY name
 #endif // INITGUID 
@@ -285,7 +315,7 @@ DEFINE_PROPERTYKEY(PKEY_AppUserModel_IsDestListSeparator, 0x9F4C2855, 0x9F79, 0x
 #ifndef __IPropertyStore_INTERFACE_DEFINED__
 #define __IPropertyStore_INTERFACE_DEFINED__
 
-EXTERN_C const IID IID_IPropertyStore = { 0x886d8eeb, 0x8cf2, 0x4446, { 0x8d, 0x02, 0xcd, 0xba, 0x1d, 0xbd, 0xcf, 0x99 } };
+DECLSPEC_SELECTANY EXTERN_GUID const IID IID_IPropertyStore = { 0x886d8eeb, 0x8cf2, 0x4446, { 0x8d, 0x02, 0xcd, 0xba, 0x1d, 0xbd, 0xcf, 0x99 } };
 
 typedef struct IPropertyStoreVtbl
 {
@@ -348,8 +378,8 @@ extern "C" const CLSID CLSID_CustomDestinationList      = {0x77f10cf0,0x3db5,0x4
 extern "C" const CLSID CLSID_EnumerableObjectCollection = {0x2d3468c1,0x36a7,0x43b6,{0xac,0x24,0xd3,0xf0,0x2f,0xd9,0x60,0x7a}};
 */
 
-EXTERN_C const IID IID_ITaskbarList3 = {0xea1afb91,0x9e28,0x4b86,{0x90,0xe9,0x9e,0x9f,0x8a,0x5e,0xef,0xaf}}; // ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf
-EXTERN_C const CLSID CLSID_TaskbarList = {0x56fdf344,0xfd6d,0x11d0,{0x95,0x8a,0x00,0x60,0x97,0xc9,0xa0,0x90}}; // 56fdf344-fd6d-11d0-958a-006097c9a090;
+DECLSPEC_SELECTANY EXTERN_GUID const IID IID_ITaskbarList3 = {0xea1afb91,0x9e28,0x4b86,{0x90,0xe9,0x9e,0x9f,0x8a,0x5e,0xef,0xaf}}; // ea1afb91-9e28-4b86-90e9-9e9f8a5eefaf
+DECLSPEC_SELECTANY EXTERN_GUID const CLSID CLSID_TaskbarList = {0x56fdf344,0xfd6d,0x11d0,{0x95,0x8a,0x00,0x60,0x97,0xc9,0xa0,0x90}}; // 56fdf344-fd6d-11d0-958a-006097c9a090;
 
 typedef enum TBPFLAG
 {
@@ -513,10 +543,10 @@ enum {
 	DWMWA_LAST
 };
 
-extern HRESULT DwmSetWindowAttribute(HWND hwnd, DWORD attr, LPCVOID attrValue, DWORD attrSize);
-extern HRESULT DwmSetIconicThumbnail(HWND hwnd, HBITMAP hbmp, DWORD dwSITFlags);
-extern HRESULT DwmSetIconicLivePreviewBitmap(HWND hwnd, HBITMAP hbmp, POINT *pptClient, DWORD dwSITFlags);
-extern HRESULT DwmInvalidateIconicBitmaps(HWND hwnd);
+extern HRESULT WINAPI DwmSetWindowAttribute(HWND hwnd, DWORD attr, LPCVOID attrValue, DWORD attrSize);
+extern HRESULT WINAPI DwmSetIconicThumbnail(HWND hwnd, HBITMAP hbmp, DWORD dwSITFlags);
+extern HRESULT WINAPI DwmSetIconicLivePreviewBitmap(HWND hwnd, HBITMAP hbmp, POINT *pptClient, DWORD dwSITFlags);
+extern HRESULT WINAPI DwmInvalidateIconicBitmaps(HWND hwnd);
 #ifndef DWM_SIT_DISPLAYFRAME
 #	define DWM_SIT_DISPLAYFRAME 0x1
 #endif

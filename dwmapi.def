@@ -1,0 +1,6 @@
+LIBRARY dwmapi.dll
+EXPORTS
+DwmSetWindowAttribute@16
+DwmSetIconicThumbnail@12
+DwmSetIconicLivePreviewBitmap@16
+DwmInvalidateIconicBitmaps@4
