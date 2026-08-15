@@ -7,6 +7,7 @@ static gboolean pixbuf_to_hbitmaps_normal(GdkPixbuf *pixbuf, HBITMAP *color, HBI
 static gboolean pixbuf_to_hbitmaps_alpha_winxp(GdkPixbuf *pixbuf, HBITMAP *color, HBITMAP *mask);
 static HICON pixbuf_to_hicon (GdkPixbuf *pixbuf);
 static HBITMAP create_alpha_bitmap (gint width, gint height, guchar **outdata);
+static void win7_send_iconic_thumbnail(PidginConversation *gtkconv, HWND hwnd, gint maxwidth, gint maxheight);
 
 // PidginConversation -> HWND  map
 static GHashTable *win7_pconv_hwnd = NULL;
@@ -74,6 +75,7 @@ win7_tabthumb_each_cb(gpointer key, gpointer value, gpointer user_data)
 	BOOL fForceIconic;
 	BOOL fHasIconicBitmap;
 	HWND hTab = value;
+	//PidginConversation *gtkconv = key;
 	
 	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
 	{
@@ -87,6 +89,8 @@ win7_tabthumb_each_cb(gpointer key, gpointer value, gpointer user_data)
 	
 	DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
 		sizeof(fHasIconicBitmap));
+	
+	DwmInvalidateIconicBitmaps(hTab);
 }
 
 void
@@ -336,13 +340,94 @@ showConversation(PurpleConversation *conv){
 	}
 }
 
+static void
+win7_send_iconic_thumbnail(PidginConversation *gtkconv, HWND hwnd, gint maxwidth, gint maxheight)
+{
+	PurpleConversation *conv = gtkconv->active_conv;
+	gconstpointer data = NULL;
+	PurpleStoredImage *custom_img = NULL;
+	size_t len;
+	GdkPixbuf *pixbuf = NULL;
+	GdkPixbuf *temp_pixbuf = NULL;
+	HBITMAP hbitmap, mask;
+	
+	/*PurpleAccount *account = purple_conversation_get_account(conv);
+	PurpleBuddy *buddy = purple_find_buddy(account, purple_conversation_get_name(conv));
+	if (buddy)
+	{
+		PurpleContact *contact = purple_buddy_get_contact(buddy);
+		if (contact)
+		{
+			custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)contact);
+			if (custom_img)
+			{
+				data = purple_imgstore_get_data(custom_img);
+				len = purple_imgstore_get_size(custom_img);
+			}
+		}
+	}*/
+	if (data == NULL)
+	{
+		PurpleBuddyIcon *icon = purple_conv_im_get_icon(PURPLE_CONV_IM(conv));
+		if (icon)
+		{
+			data = purple_buddy_icon_get_data(icon, &len);
+		}
+	}
+	if (data == NULL)
+	{
+		pixbuf = pidgin_conv_get_tab_icon(conv, FALSE);
+	}
+	
+	if (data && len && !pixbuf)
+	{
+		GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+		gdk_pixbuf_loader_write(loader, data, len, NULL);
+		gdk_pixbuf_loader_close(loader, NULL);
+		
+		purple_imgstore_unref(custom_img);
+		pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
+	}
+	if (pixbuf)
+	{
+		gint original_width = gdk_pixbuf_get_width (pixbuf);
+		gint original_height = gdk_pixbuf_get_height (pixbuf);
+		gfloat ratio = original_width / (gfloat) original_height;
+		gint newwidth, newheight;
+		
+		newheight = maxheight;
+		newwidth = maxheight * ratio;
+		if (newwidth > maxwidth)
+		{
+			newwidth = maxwidth;
+			newheight = maxwidth * (1/ratio);
+		}
+		
+		temp_pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
+		g_object_unref(pixbuf);
+		pixbuf = temp_pixbuf;
+		
+		if (!gdk_pixbuf_get_has_alpha(pixbuf))
+		{
+			temp_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
+			g_object_unref(pixbuf);
+			pixbuf = temp_pixbuf;
+		}
+		
+		pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
+		
+		DwmSetIconicThumbnail(hwnd, hbitmap, 1);
+		DeleteObject(mask);
+		DeleteObject(hbitmap);
+		g_object_unref(pixbuf);
+	}
+}
+
 LRESULT CALLBACK 
 win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 {
 	PurpleConversation *conv;
 	PidginConversation *pconv;
-	HBITMAP hbitmap, mask;
-	GdkPixbuf *pixbuf = NULL;
 	PidginWin7Store *store = (PidginWin7Store *)this_plugin->extra;
 	
 	pconv = win7_get_pconv_from_hwnd(hwnd);
@@ -379,86 +464,8 @@ win7_conv_handler(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam)
 		}	break;
 		case WM_DWMSENDICONICTHUMBNAIL:
 		{
-			// Thumbnail needs to be drawn
-			gconstpointer data = NULL;
-			PurpleStoredImage *custom_img = NULL;
-			size_t len;
-			GdkPixbuf *temp_pixbuf = NULL;
-			/*PurpleAccount *account = purple_conversation_get_account(conv);
-			PurpleBuddy *buddy = purple_find_buddy(account, purple_conversation_get_name(conv));
-			if (buddy)
-			{
-				PurpleContact *contact = purple_buddy_get_contact(buddy);
-				if (contact)
-				{
-					custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)contact);
-					if (custom_img)
-					{
-						data = purple_imgstore_get_data(custom_img);
-						len = purple_imgstore_get_size(custom_img);
-					}
-				}
-			}*/
-			if (data == NULL)
-			{
-				PurpleBuddyIcon *icon = purple_conv_im_get_icon(PURPLE_CONV_IM(conv));
-				if (icon)
-				{
-					data = purple_buddy_icon_get_data(icon, &len);
-				}
-			}
-			if (data == NULL)
-			{
-				pixbuf = pidgin_conv_get_tab_icon(conv, FALSE);
-			}
-			
-			if (data && len && !pixbuf)
-			{
-				GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-				gdk_pixbuf_loader_write(loader, data, len, NULL);
-				gdk_pixbuf_loader_close(loader, NULL);
-				
-				purple_imgstore_unref(custom_img);
-				pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
-			}
-			if (pixbuf)
-			{
-				gint original_width = gdk_pixbuf_get_width (pixbuf);
-				gint original_height = gdk_pixbuf_get_height (pixbuf);
-				gfloat ratio = original_width / (gfloat) original_height;
-				gint maxwidth = HIWORD(lparam);
-				gint maxheight = LOWORD(lparam);
-				gint newwidth, newheight;
-				
-				newheight = maxheight;
-				newwidth = maxheight * ratio;
-				if (newwidth > maxwidth)
-				{
-					newwidth = maxwidth;
-					newheight = maxwidth * (1/ratio);
-				}
-				
-				temp_pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
-				g_object_unref(pixbuf);
-				pixbuf = temp_pixbuf;
-				
-				if (!gdk_pixbuf_get_has_alpha(pixbuf))
-				{
-					temp_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
-					g_object_unref(pixbuf);
-					pixbuf = temp_pixbuf;
-				}
-				
-				pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-				
-				DwmSetIconicThumbnail(hwnd, hbitmap, 1);
-				DeleteObject(mask);
-				DeleteObject(hbitmap);
-				g_object_unref(pixbuf);
-				
-				return 0;
-			}
-			
+			win7_send_iconic_thumbnail(pconv, hwnd, HIWORD(lparam), LOWORD(lparam));
+			return 0;
 		}	break;
 		case WM_DWMSENDICONICLIVEPREVIEWBITMAP:
 		{
@@ -548,7 +555,7 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 				g_free(wlabel);
 				
 				// Invalidate the thumbnail preview
-				DwmInvalidateIconicBitmaps(hTab);
+				//DwmInvalidateIconicBitmaps(hTab);
 			}	break;
 			case PURPLE_CONV_UPDATE_UNSEEN:
 			{
@@ -578,14 +585,14 @@ win7_create_hiddenwin(PidginConversation *pconv)
 {
 	HWND hTab;
 	DWORD lasterror;
-	BOOL fForceIconic = TRUE;
-	BOOL fHasIconicBitmap = TRUE;
 	LPCWSTR wname = L"WinpidginConvThumbCls";
 	wchar_t *wlabel;
+	DWORD dwExStyle = WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE;
+	DWORD dwStyle = WS_POPUP | WS_BORDER | WS_SYSMENU | WS_CAPTION;
 	
 	/* Create the window */
 	wlabel = g_utf8_to_utf16(purple_conversation_get_title(pconv->active_conv), -1, NULL, NULL, NULL);
-	hTab = CreateWindowW(wname, wlabel, 0, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
+	hTab = CreateWindowExW(dwExStyle, wname, wlabel, dwStyle, 0, 0, 0, 0, GetDesktopWindow(), NULL, winpidgin_exe_hinstance(), 0);
 	g_free(wlabel);
 	
 	lasterror = GetLastError();
@@ -593,15 +600,6 @@ win7_create_hiddenwin(PidginConversation *pconv)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 
 	win7_update_icon(pconv->active_conv, PURPLE_CONV_UPDATE_ICON, NULL);
-	
-	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
-	{
-		DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
-			&fForceIconic, sizeof(fForceIconic));
-		
-		DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
-			sizeof(fHasIconicBitmap));
-	}
 	
 	g_hash_table_insert(win7_pconv_hwnd, pconv, hTab);
 	g_hash_table_insert(win7_hwnd_pconv, hTab, pconv);
@@ -636,6 +634,8 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	DWORD lasterror;
 	ATOM thumbcls;
 
+	ChangeWindowMessageFilter(WM_DWMSENDICONICTHUMBNAIL, MSGFLT_ADD);
+
 	if (win7_hwnd_pconv == NULL)
 		win7_hwnd_pconv = g_hash_table_new(NULL, NULL);
 	if (win7_pconv_hwnd == NULL)
@@ -654,6 +654,8 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	wcex.lpszClassName	= wname;
 	wcex.hIconSm		= NULL;
 	thumbcls = RegisterClassExW(&wcex);
+	(void) thumbcls;
+
 	lasterror = GetLastError();
 	if (lasterror)
 		purple_debug_error("win7", "RegisterClassEx error %d\n", lasterror);
@@ -695,8 +697,11 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
 	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 
-	if (!hTab)
+	if (!hTab) {
 		hTab = win7_create_hiddenwin(pconv);
+		itl->lpVtbl->RegisterTab(itl, hTab, hWin);
+		itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
+	}
 	
 	itl->lpVtbl->SetTabActive(itl, hTab, hWin, 0);
 }
@@ -731,6 +736,20 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 	
 	itl->lpVtbl->RegisterTab(itl, hTab, hWin);
 	itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
+	
+	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
+	{
+		BOOL fForceIconic = TRUE;
+		BOOL fHasIconicBitmap = TRUE;
+
+		DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+			&fForceIconic, sizeof(fForceIconic));
+		
+		DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+			sizeof(fHasIconicBitmap));
+
+		DwmInvalidateIconicBitmaps(hTab); 
+	}
 	
 	label = purple_conversation_get_title(conv);
 	wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);

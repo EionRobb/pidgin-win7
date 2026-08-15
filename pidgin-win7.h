@@ -25,6 +25,13 @@
 #define PropVariantInit(pvar) memset((pvar), 0, sizeof(PROPVARIANT))
 #endif
 extern HRESULT WINAPI SetCurrentProcessExplicitAppUserModelID(LPCWSTR AppID);
+#ifndef MSGFLT_ADD
+#define MSGFLT_ADD 1
+#endif
+#ifndef MSGFLT_REMOVE
+#define MSGFLT_REMOVE 2
+#endif
+extern BOOL WINAPI ChangeWindowMessageFilter(UINT message, DWORD dwFlag);
 #endif
 
 #ifdef __cplusplus
