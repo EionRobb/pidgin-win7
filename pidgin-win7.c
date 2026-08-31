@@ -346,27 +346,43 @@ win7_send_iconic_thumbnail(PidginConversation *gtkconv, HWND hwnd, gint maxwidth
 	PurpleConversation *conv = gtkconv->active_conv;
 	gconstpointer data = NULL;
 	PurpleStoredImage *custom_img = NULL;
-	size_t len;
+	size_t len = 0;
 	GdkPixbuf *pixbuf = NULL;
 	GdkPixbuf *temp_pixbuf = NULL;
 	HBITMAP hbitmap, mask;
-	
-	/*PurpleAccount *account = purple_conversation_get_account(conv);
-	PurpleBuddy *buddy = purple_find_buddy(account, purple_conversation_get_name(conv));
-	if (buddy)
+	PurpleAccount *account = purple_conversation_get_account(conv);
+	const char *name = purple_conversation_get_name(conv);
+
+	if (account && name)
 	{
-		PurpleContact *contact = purple_buddy_get_contact(buddy);
-		if (contact)
+		PurpleBuddy *buddy = purple_find_buddy(account, name);
+		if (buddy)
 		{
-			custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)contact);
-			if (custom_img)
+			PurpleContact *contact = purple_buddy_get_contact(buddy);
+			if (contact)
 			{
-				data = purple_imgstore_get_data(custom_img);
-				len = purple_imgstore_get_size(custom_img);
+				custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)contact);
+			}
+			if (!custom_img)
+			{
+				custom_img = purple_buddy_icons_node_find_custom_icon((PurpleBlistNode*)buddy);
 			}
 		}
-	}*/
-	if (data == NULL)
+		if (custom_img)
+		{
+			data = purple_imgstore_get_data(custom_img);
+			len = purple_imgstore_get_size(custom_img);
+		}
+		else
+		{
+			PurpleBuddyIcon *icon = purple_buddy_icons_find(account, name);
+			if (icon)
+			{
+				data = purple_buddy_icon_get_data(icon, &len);
+			}
+		}
+	}
+	if (data == NULL && purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_IM)
 	{
 		PurpleBuddyIcon *icon = purple_conv_im_get_icon(PURPLE_CONV_IM(conv));
 		if (icon)
@@ -374,52 +390,76 @@ win7_send_iconic_thumbnail(PidginConversation *gtkconv, HWND hwnd, gint maxwidth
 			data = purple_buddy_icon_get_data(icon, &len);
 		}
 	}
-	if (data == NULL)
+
+	if (data && len)
+	{
+		GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
+		if (loader)
+		{
+			gdk_pixbuf_loader_write(loader, data, len, NULL);
+			gdk_pixbuf_loader_close(loader, NULL);
+			GdkPixbuf *loaded = gdk_pixbuf_loader_get_pixbuf(loader);
+			if (loaded)
+			{
+				pixbuf = g_object_ref(loaded);
+			}
+			g_object_unref(loader);
+		}
+	}
+
+	if (custom_img)
+	{
+		purple_imgstore_unref(custom_img);
+		custom_img = NULL;
+	}
+
+	if (pixbuf == NULL)
 	{
 		pixbuf = pidgin_conv_get_tab_icon(conv, FALSE);
 	}
 	
-	if (data && len && !pixbuf)
-	{
-		GdkPixbufLoader *loader = gdk_pixbuf_loader_new();
-		gdk_pixbuf_loader_write(loader, data, len, NULL);
-		gdk_pixbuf_loader_close(loader, NULL);
-		
-		purple_imgstore_unref(custom_img);
-		pixbuf = gdk_pixbuf_loader_get_pixbuf(loader);
-	}
 	if (pixbuf)
 	{
 		gint original_width = gdk_pixbuf_get_width (pixbuf);
 		gint original_height = gdk_pixbuf_get_height (pixbuf);
-		gfloat ratio = original_width / (gfloat) original_height;
+		gfloat ratio;
 		gint newwidth, newheight;
-		
-		newheight = maxheight;
-		newwidth = maxheight * ratio;
-		if (newwidth > maxwidth)
+
+		if (original_height > 0 && original_width > 0)
 		{
-			newwidth = maxwidth;
-			newheight = maxwidth * (1/ratio);
+			ratio = original_width / (gfloat) original_height;
+			newheight = maxheight;
+			newwidth = maxheight * ratio;
+			if (newwidth > maxwidth)
+			{
+				newwidth = maxwidth;
+				newheight = maxwidth * (1/ratio);
+			}
+			if (newwidth <= 0) newwidth = 1;
+			if (newheight <= 0) newheight = 1;
+
+			temp_pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
+			g_object_unref(pixbuf);
+			pixbuf = temp_pixbuf;
 		}
-		
-		temp_pixbuf = gdk_pixbuf_scale_simple(pixbuf, newwidth, newheight, GDK_INTERP_BILINEAR);
-		g_object_unref(pixbuf);
-		pixbuf = temp_pixbuf;
-		
-		if (!gdk_pixbuf_get_has_alpha(pixbuf))
+
+		if (pixbuf && !gdk_pixbuf_get_has_alpha(pixbuf))
 		{
 			temp_pixbuf = gdk_pixbuf_add_alpha(pixbuf, FALSE, 0, 0, 0);
 			g_object_unref(pixbuf);
 			pixbuf = temp_pixbuf;
 		}
 		
-		pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask);
-		
-		DwmSetIconicThumbnail(hwnd, hbitmap, 1);
-		DeleteObject(mask);
-		DeleteObject(hbitmap);
-		g_object_unref(pixbuf);
+		if (pixbuf && pixbuf_to_hbitmaps_alpha_winxp(pixbuf, &hbitmap, &mask))
+		{
+			DwmSetIconicThumbnail(hwnd, hbitmap, 1);
+			DeleteObject(mask);
+			DeleteObject(hbitmap);
+		}
+		if (pixbuf)
+		{
+			g_object_unref(pixbuf);
+		}
 	}
 }
 
@@ -544,18 +584,34 @@ win7_update_icon(PurpleConversation *conv, PurpleConvUpdateType type, gpointer u
 				icon = pidgin_conv_get_tab_icon(conv, FALSE);
 				if (icon)
 				{
-					SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)pixbuf_to_hicon(icon));
+					HICON hIconSmall = pixbuf_to_hicon(icon);
+					GdkPixbuf *big_pixbuf = gdk_pixbuf_scale_simple(icon, 32, 32, GDK_INTERP_BILINEAR);
+					HICON hIconBig = big_pixbuf ? pixbuf_to_hicon(big_pixbuf) : pixbuf_to_hicon(icon);
+					if (big_pixbuf)
+						g_object_unref(big_pixbuf);
+
+					if (hIconSmall)
+					{
+						HICON hPrev = (HICON)SendMessage(hTab, WM_SETICON, ICON_SMALL, (LPARAM)hIconSmall);
+						if (hPrev && hPrev != hIconSmall && hPrev != hIconBig)
+							DestroyIcon(hPrev);
+					}
+					if (hIconBig)
+					{
+						HICON hPrev = (HICON)SendMessage(hTab, WM_SETICON, ICON_BIG, (LPARAM)hIconBig);
+						if (hPrev && hPrev != hIconSmall && hPrev != hIconBig)
+							DestroyIcon(hPrev);
+					}
 					g_object_unref(icon);
 				}
 
 				wchar_t *wlabel = g_utf8_to_utf16(purple_conversation_get_title(conv), -1, NULL, NULL, NULL);
-				// Set the title for the 'window'
-				//SendMessageW(hTab, WM_SETTEXT, 0, (LPARAM)wlabel);
 				SetWindowTextW(hTab, wlabel);
 				g_free(wlabel);
 				
 				// Invalidate the thumbnail preview
-				//DwmInvalidateIconicBitmaps(hTab);
+				if (purple_prefs_get_bool(PREF_TAB_THUMBS))
+					DwmInvalidateIconicBitmaps(hTab);
 			}	break;
 			case PURPLE_CONV_UPDATE_UNSEEN:
 			{
@@ -599,10 +655,24 @@ win7_create_hiddenwin(PidginConversation *pconv)
 	if (lasterror)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 
-	win7_update_icon(pconv->active_conv, PURPLE_CONV_UPDATE_ICON, NULL);
-	
 	g_hash_table_insert(win7_pconv_hwnd, pconv, hTab);
 	g_hash_table_insert(win7_hwnd_pconv, hTab, pconv);
+
+	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
+	{
+		BOOL fForceIconic = TRUE;
+		BOOL fHasIconicBitmap = TRUE;
+
+		DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
+			&fForceIconic, sizeof(fForceIconic));
+		
+		DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
+			sizeof(fHasIconicBitmap));
+
+		DwmInvalidateIconicBitmaps(hTab); 
+	}
+
+	win7_update_icon(pconv->active_conv, PURPLE_CONV_UPDATE_ICON, NULL);
 	
 	return hTab;
 }
@@ -616,6 +686,13 @@ win7_destroy_hiddenwin(PurpleConversation *conv)
 	
 	if(hTab)
 	{
+		HICON hIcon = (HICON)SendMessage(hTab, WM_SETICON, ICON_SMALL, 0);
+		if (hIcon)
+			DestroyIcon(hIcon);
+		hIcon = (HICON)SendMessage(hTab, WM_SETICON, ICON_BIG, 0);
+		if (hIcon)
+			DestroyIcon(hIcon);
+
 		DestroyWindow(hTab);
 		g_hash_table_remove(win7_hwnd_pconv, hTab);
 	}
@@ -635,6 +712,7 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 	ATOM thumbcls;
 
 	ChangeWindowMessageFilter(WM_DWMSENDICONICTHUMBNAIL, MSGFLT_ADD);
+	ChangeWindowMessageFilter(WM_DWMSENDICONICLIVEPREVIEWBITMAP, MSGFLT_ADD);
 
 	if (win7_hwnd_pconv == NULL)
 		win7_hwnd_pconv = g_hash_table_new(NULL, NULL);
@@ -698,9 +776,17 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 
 	if (!hTab) {
+		const gchar *label;
+		wchar_t *wlabel;
+
 		hTab = win7_create_hiddenwin(pconv);
 		itl->lpVtbl->RegisterTab(itl, hTab, hWin);
 		itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
+
+		label = purple_conversation_get_title(conv);
+		wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);
+		itl->lpVtbl->SetThumbnailTooltip(itl, hTab, wlabel);
+		g_free(wlabel);
 	}
 	
 	itl->lpVtbl->SetTabActive(itl, hTab, hWin, 0);
@@ -736,20 +822,6 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 	
 	itl->lpVtbl->RegisterTab(itl, hTab, hWin);
 	itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
-	
-	if (purple_prefs_get_bool(PREF_TAB_THUMBS))
-	{
-		BOOL fForceIconic = TRUE;
-		BOOL fHasIconicBitmap = TRUE;
-
-		DwmSetWindowAttribute(hTab, DWMWA_FORCE_ICONIC_REPRESENTATION, 
-			&fForceIconic, sizeof(fForceIconic));
-		
-		DwmSetWindowAttribute(hTab, DWMWA_HAS_ICONIC_BITMAP, &fHasIconicBitmap,
-			sizeof(fHasIconicBitmap));
-
-		DwmInvalidateIconicBitmaps(hTab); 
-	}
 	
 	label = purple_conversation_get_title(conv);
 	wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);
