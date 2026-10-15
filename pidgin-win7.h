@@ -25,6 +25,7 @@
 #define PropVariantInit(pvar) memset((pvar), 0, sizeof(PROPVARIANT))
 #endif
 extern HRESULT WINAPI SetCurrentProcessExplicitAppUserModelID(LPCWSTR AppID);
+extern HRESULT WINAPI SHGetPropertyStoreForWindow(HWND hwnd, REFIID riid, void **ppv);
 #ifndef MSGFLT_ADD
 #define MSGFLT_ADD 1
 #endif
@@ -318,6 +319,7 @@ typedef struct {
 
 DEFINE_PROPERTYKEY(PKEY_Title, 0xF29F85E0, 0x4FF9, 0x1068, 0xAB, 0x91, 0x08, 0x00, 0x2B, 0x27, 0xB3, 0xD9, 2);
 DEFINE_PROPERTYKEY(PKEY_AppUserModel_IsDestListSeparator, 0x9F4C2855, 0x9F79, 0x4B39, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3, 6);
+DEFINE_PROPERTYKEY(PKEY_AppUserModel_ID, 0x9F4C2855, 0x9F79, 0x4B39, 0xA8, 0xD0, 0xE1, 0xD4, 0x2D, 0xE1, 0xD5, 0xF3, 5);
 
 #ifndef __IPropertyStore_INTERFACE_DEFINED__
 #define __IPropertyStore_INTERFACE_DEFINED__
@@ -620,6 +622,10 @@ void win7_disable_overlay(PidginWin7Store *store);
 gboolean win7_enable_convwin(PidginWin7Store *store);
 void win7_disable_convwin(PidginWin7Store *store);
 
+const wchar_t *win7_get_app_id(void);
+HRESULT win7_set_window_appid(HWND hwnd);
+void win7_set_all_windows_appid(void);
+
 static gboolean
 plugin_load(PurplePlugin *plugin)
 {
@@ -628,6 +634,8 @@ plugin_load(PurplePlugin *plugin)
 	
 	store = g_new0(PidginWin7Store, 1);
 	plugin->extra = store;
+
+	win7_set_all_windows_appid();
 	
 	purple_prefs_connect_callback(plugin, PREF_JUMPLIST, win7_jumplist_pref_cb, store);
 	purple_prefs_connect_callback(plugin, PREF_OVERLAY_ICON, win7_overlay_pref_cb, store);
@@ -690,7 +698,7 @@ plugin_init(PurplePlugin *plugin)
 	purple_prefs_add_bool(PREF_TAB_THUMBS, FALSE);
 	purple_prefs_add_bool(PREF_FILE_PROGRESS, TRUE);
 	
-	SetCurrentProcessExplicitAppUserModelID(PIDGIN_WIN7_APPID);
+	SetCurrentProcessExplicitAppUserModelID(win7_get_app_id());
 }
 
 static PurplePluginPrefFrame *

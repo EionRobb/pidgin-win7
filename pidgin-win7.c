@@ -14,6 +14,101 @@ static GHashTable *win7_pconv_hwnd = NULL;
 // HWND -> PidginConversation  map
 static GHashTable *win7_hwnd_pconv = NULL;
 
+static wchar_t win7_app_id[128] = L"";
+
+static BOOL 
+win7_is_multiple_instances(void) {
+    int numArgs = 0;
+    LPWSTR *argv = CommandLineToArgvW(GetCommandLineW(), &numArgs);
+    if (!argv) return FALSE;
+    BOOL multiple = FALSE;
+	int i;
+
+    for (i = 1; i < numArgs; i++) {
+        if (wcscmp(argv[i], L"-m") == 0 || wcscmp(argv[i], L"--multiple") == 0) {
+            multiple = TRUE;
+            break;
+        }
+        if (argv[i][0] == L'-' && argv[i][1] != L'-' && argv[i][1] != L'\0') {
+            BOOL cluster_valid = TRUE;
+            BOOL has_m = FALSE;
+            int j;
+
+            for (j = 1; argv[i][j] != L'\0'; j++) {
+                wchar_t ch = argv[i][j];
+                if (ch == L'm') {
+                    has_m = TRUE;
+                } else if (ch == L'd' || ch == L'f' || ch == L'h' || ch == L'n' || ch == L'v') {
+                    // valid boolean flags
+                } else {
+                    cluster_valid = FALSE;
+                    break;
+                }
+            }
+            if (cluster_valid && has_m) {
+                multiple = TRUE;
+                break;
+            }
+        }
+    }
+    LocalFree(argv);
+    return multiple;
+}
+
+const wchar_t *
+win7_get_app_id(void) {
+    if (win7_app_id[0] == L'\0') {
+        if (win7_is_multiple_instances()) {
+            _snwprintf(win7_app_id, G_N_ELEMENTS(win7_app_id), L"Pidgin.Pidgin.%lu", (unsigned long)GetCurrentProcessId());
+        } else {
+            wcsncpy(win7_app_id, L"Pidgin.Pidgin", G_N_ELEMENTS(win7_app_id) - 1);
+        }
+    }
+    return win7_app_id;
+}
+
+HRESULT
+win7_set_window_appid(HWND hwnd)
+{
+	IPropertyStore *pps = NULL;
+	HRESULT hr;
+
+	if (!hwnd || !IsWindow(hwnd))
+		return E_INVALIDARG;
+
+	hr = SHGetPropertyStoreForWindow(hwnd, &IID_IPropertyStore, (void **)&pps);
+	if (SUCCEEDED(hr) && pps) {
+		PROPVARIANT propvar;
+		PropVariantInit(&propvar);
+		propvar.vt = VT_LPWSTR;
+		propvar.pwszVal = (LPWSTR)win7_get_app_id();
+		hr = pps->lpVtbl->SetValue(pps, &PKEY_AppUserModel_ID, &propvar);
+		if (SUCCEEDED(hr)) {
+			pps->lpVtbl->Commit(pps);
+		}
+		pps->lpVtbl->Release(pps);
+	}
+	return hr;
+}
+
+void
+win7_set_all_windows_appid(void)
+{
+	GList *toplevels = gtk_window_list_toplevels();
+	GList *l;
+
+	for (l = toplevels; l; l = l->next) {
+		GtkWidget *w = GTK_WIDGET(l->data);
+		if (GTK_IS_WINDOW(w) && gtk_widget_get_window(w)) {
+			HWND hwnd = GDK_WINDOW_HWND(gtk_widget_get_window(w));
+			if (hwnd) {
+				win7_set_window_appid(hwnd);
+			}
+		}
+	}
+	g_list_free(toplevels);
+}
+
 HWND
 win7_get_hwnd_from_pconv(PidginConversation *gtkconv)
 {	
@@ -192,6 +287,9 @@ win7_enable_overlay(PidginWin7Store *store)
 		// The buddy list MUST be shown before we put the taskbar icon on it
 		purple_blist_show();
 		purple_blist_set_visible(TRUE);
+
+		if (blist && blist->window && gtk_widget_get_window(blist->window))
+			win7_set_window_appid(GDK_WINDOW_HWND(gtk_widget_get_window(blist->window)));
 
 		if (blist && blist->window)
 			store->blist_destroy_handler_id = g_signal_connect(G_OBJECT(blist->window), "delete_event", G_CALLBACK(blist_delete_event_cb), NULL);
@@ -655,6 +753,8 @@ win7_create_hiddenwin(PidginConversation *pconv)
 	if (lasterror)
 		purple_debug_error("win7", "CreateWindow error %d\n", lasterror);
 
+	win7_set_window_appid(hTab);
+
 	g_hash_table_insert(win7_pconv_hwnd, pconv, hTab);
 	g_hash_table_insert(win7_hwnd_pconv, hTab, pconv);
 
@@ -713,6 +813,8 @@ win7_init_conv_windows(ITaskbarList3 *itl)
 
 	ChangeWindowMessageFilter(WM_DWMSENDICONICTHUMBNAIL, MSGFLT_ADD);
 	ChangeWindowMessageFilter(WM_DWMSENDICONICLIVEPREVIEWBITMAP, MSGFLT_ADD);
+
+	win7_set_all_windows_appid();
 
 	if (win7_hwnd_pconv == NULL)
 		win7_hwnd_pconv = g_hash_table_new(NULL, NULL);
@@ -775,6 +877,9 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
 	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 
+	if (hWin)
+		win7_set_window_appid(hWin);
+
 	if (!hTab) {
 		const gchar *label;
 		wchar_t *wlabel;
@@ -787,6 +892,8 @@ on_conv_switch(PurpleConversation *conv, gpointer user_data)
 		wlabel = g_utf8_to_utf16(label, -1, NULL, NULL, NULL);
 		itl->lpVtbl->SetThumbnailTooltip(itl, hTab, wlabel);
 		g_free(wlabel);
+	} else {
+		win7_set_window_appid(hTab);
 	}
 	
 	itl->lpVtbl->SetTabActive(itl, hTab, hWin, 0);
@@ -817,8 +924,13 @@ on_conv_create(PurpleConversation *conv, gpointer user_data)
 	HWND hWin = GDK_WINDOW_HWND(gtk_widget_get_window(pconv->win->window));
 	HWND hTab = win7_get_hwnd_from_pconv(pconv);
 	
+	if (hWin)
+		win7_set_window_appid(hWin);
+	
 	if (!hTab)
 		hTab = win7_create_hiddenwin(pconv);
+	else
+		win7_set_window_appid(hTab);
 	
 	itl->lpVtbl->RegisterTab(itl, hTab, hWin);
 	itl->lpVtbl->SetTabOrder(itl, hTab, NULL);
@@ -1231,6 +1343,8 @@ pidgin_get_ft_hwnd()
 		return NULL;
 	
 	ft_window = GDK_WINDOW_HWND(gtk_widget_get_window(xfer_dialog->window));
+	if (ft_window)
+		win7_set_window_appid(ft_window);
 	
 	return ft_window;
 }
@@ -1298,7 +1412,7 @@ void pidgin_win7_create_jumplist(ICustomDestinationList *pcdl)
 	IObjectArray *poa;
 	IObjectCollection *shellLinks;
 	
-	pcdl->lpVtbl->SetAppID(pcdl, PIDGIN_WIN7_APPID);
+	pcdl->lpVtbl->SetAppID(pcdl, win7_get_app_id());
 	
 	if (SUCCEEDED(pcdl->lpVtbl->BeginList(pcdl, &minSlots, &IID_IObjectArray, (void**)&poa)))
 		purple_debug_info("win7", "Beginlist begun\n");
